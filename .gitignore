@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.blend1
+*.zip
+# file nhân vật dùng cho test: tài sản riêng, không đưa lên repo
+tests/fixtures/
