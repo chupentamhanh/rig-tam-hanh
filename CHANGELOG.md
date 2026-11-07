@@ -7,6 +7,26 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.26.0 — 2026-11-07
+
+**Mesh phụ bám da** (`followkeys.py`, nút "Mesh phụ bám da" ở khu Mặt).
+- Lỗi: "Thử biểu cảm" chỉ đặt slider trên mesh mặt; lông mày rời đi theo bằng
+  driver nhưng chỉ có 8 key BRW_* (chép từ Kid). Adult: EYE_Blink kéo da dưới
+  lông mày 16-22 mm, EYE_Squint 9.7 mm, EYE_Wide 4.8 mm -- lông mày đứng yên,
+  tách / lún khỏi da; 8 key BRW_* cũng lệch da 3.9-8.7 mm.
+- Neo từng vertex mesh phụ vào điểm da gần nhất (tam giác + trọng tâm) kèm
+  khoảng hở trong khung tam giác; mỗi key của mặt: dời theo điểm neo, khoảng hở
+  xoay theo da. Key thiếu thì tạo kèm driver, key có thì ghi lại theo da. Chỉ
+  dùng dữ liệu shape key, không pose rig. Mesh phụ = mesh đang chọn, không chọn
+  thì lông mày (vai trò BROW / mesh phụ khớp theo mẫu).
+- Tuỳ chọn "Làm mượt" (mặc định 0). Da giãn thì lông mày giãn theo: nhắm mắt
+  dày x1.25, nhướng mày x1.34. Làm mượt bớt giãn nhưng hở khỏi da: nhắm mắt 4
+  lượt x1.21 / hở 2.0 mm, 25 lượt x1.10 / 3.8 mm.
+Đo (bài `follow_skin`, khoảng cách lông mày tới da so với lúc nghỉ, tệ nhất
+qua 56 key / 15 biểu cảm mẫu): trước 6.29 mm (EYE_BlinkL, "Nhắm mắt") -> sau
+0.70 mm. File Kid_Base_1: lông mày Adult 8 -> 16 key (thêm EYE_Blink / Squint /
+Wide, MTH_Smile; ghi lại 8 BRW_*).
+
 ## 1.25.0 — 2026-11-07
 
 **Pose → Shape key: "Chỉ xương đang chọn"** (`posekey.py`).

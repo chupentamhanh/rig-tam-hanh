@@ -157,6 +157,11 @@ Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng �
     bên còn lại vẫn giữ pose. Hai key cộng lại đúng bằng key nướng cả hai bên cùng lúc.
     Tuỳ chọn tự bật khi bạn đang chọn một phần các xương đã pose.
 - **Đối xứng shape key L ↔ R**: làm một bên, chép sang bên kia theo cặp vertex đối xứng.
+- **Mesh phụ bám da**: lông mày, râu, mi là mesh rời thì chỉ đi theo những key nó có. Nút này
+  neo từng vertex của mesh phụ vào da bên dưới và dựng lại shape key cho nó theo **mọi** key của
+  mặt (key thiếu thì tạo, kèm driver), nên khi thử biểu cảm hay chạy animation, lông mày luôn
+  dán trên da. Chọn mesh phụ rồi bấm; không chọn gì thì addon lấy lông mày của nhân vật. Bấm lại
+  sau mỗi lần sửa / thêm shape key của mặt. *Làm mượt* > 0 nếu muốn lông mày bớt giãn theo da.
 - **Thử biểu cảm**: bấm thử các biểu cảm mẫu (vui, buồn, ngạc nhiên…).
 
 <br clear="right">

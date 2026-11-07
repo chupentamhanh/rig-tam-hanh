@@ -307,6 +307,7 @@ def draw_pose_key(L, context):
         if sel and len(sel) < n:
             L.label(text="Đang chọn %d -> nướng riêng phần đã chọn" % len(sel), icon='RESTRICT_SELECT_OFF')
     L.operator("face_shapes.mirror_key", icon='MOD_MIRROR')
+    L.operator("face_shapes.follow_skin", icon='MOD_SHRINKWRAP')
 
 
 CLASSES = (FACESHAPES_OT_pose_to_key,)

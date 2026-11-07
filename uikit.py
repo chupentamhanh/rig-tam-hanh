@@ -230,6 +230,8 @@ HELP = {
         "'Tạo luôn bản đối xứng' ra cả bên kia trong một lần bấm.",
         "Đối xứng L ↔ R: lật key sang bên kia (tên tự đổi L/R),",
         "hoặc chép nửa này sang nửa kia ngay trong key.",
+        "Mesh phụ bám da: lông mày / râu / mi rời đi theo MỌI key của mặt",
+        "(key thiếu thì tạo kèm driver). Chọn mesh phụ, không chọn thì lấy lông mày.",
     )),
     'fkik': ("FK / IK", (
         "Thanh trượt: 0 = FK, 1 = IK.",
