@@ -111,6 +111,12 @@ def run_one(blender, test, work, shared, timeout):
 
 
 def main():
+    # console Windows (cp1258, cp1252...) không in được tiếng Việt: luôn ra UTF-8
+    for s in (sys.stdout, sys.stderr):
+        try:
+            s.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("names", nargs="*")
     ap.add_argument("--blender")

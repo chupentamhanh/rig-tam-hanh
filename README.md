@@ -184,6 +184,12 @@ Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng �
    thì chép nó vào một thư mục `Editor` bất kỳ. Unity import FBX thành Humanoid với đúng bảng
    ánh xạ — không dùng auto-map.
 
+**Avatar theo T-pose** (mặc định bật): Avatar lấy T-pose làm tư thế tham chiếu — tay,
+bàn tay, ngón thẳng ngang, chân thẳng đứng — như nút *Enforce T-Pose* của Unity, nên animation
+retarget sang không bị lệch góc. Mô hình vẫn giữ đúng dáng trong Blender. Project Unity chỉ
+nên có một script import này; nếu còn script import Humanoid khác, Console báo lỗi và yêu cầu
+xoá trước.
+
 Mặc định chỉ xuất xương Humanoid; weight của xương phụ dồn về xương Humanoid gần nhất.
 Unity mặc định dùng tối đa 4 xương mỗi vertex (Project Settings → Quality → Skin Weights).
 

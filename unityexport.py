@@ -832,7 +832,7 @@ def _cleanup(coll, made_data):
 
 
 def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
-           only_human=True):
+           only_human=True, tpose=True):
     """Xuất. Trả về (danh sách file, dòng log).
 
     combine=True: mọi clip nằm trong chính `<tên>.fbx` (mỗi action một take),
@@ -906,6 +906,7 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
 
         mapping = {
             'version': 1, 'character': safe(name), 'keep_extra': not only_human,
+            'keep_rest_pose': not tpose,
             'combined': bool(combine and clips),
             'fps': sc.render.fps / sc.render.fps_base,
             'human': [{'human': h, 'bone': hmap[h]} for h in HUMAN_ORDER if h in hmap],
@@ -975,6 +976,13 @@ class SRP_UnitySettings(PropertyGroup):
         description="Bật: một file <tên>.fbx chứa cả nhân vật lẫn mọi clip "
                     "(mỗi action một take). Tắt: mỗi action một file "
                     "<tên>@<action>.fbx riêng")
+    tpose: BoolProperty(
+        name="Avatar theo T-pose", default=True,
+        description="Như nút Enforce T-Pose của Unity: Avatar lấy tư thế tham "
+                    "chiếu là T-pose (tay ngang, ngón thẳng, chân thẳng đứng) "
+                    "thay vì tư thế nghỉ trong Blender. Tư thế nghỉ hơi chữ A / "
+                    "gối hơi gập mà làm tham chiếu thì animation retarget sang "
+                    "lệch một góc cố định. Mô hình không bị đổi dáng")
     face_z: BoolProperty(
         name="Nhìn về +Z trong Unity", default=True,
         description="Xoay bản xuất 180° để nhân vật nhìn đúng transform.forward "
@@ -1050,7 +1058,8 @@ class SRP_OT_unity_export(Operator):
         name = st.name.strip() or default_name(arm)
         try:
             files, lines = export(context, arm, folder, name, st.which, st.face_z,
-                                  st.combine and st.which != 'NONE', st.only_human)
+                                  st.combine and st.which != 'NONE', st.only_human,
+                                  st.tpose)
         except ValueError as e:
             self.report({'ERROR'}, "Không xuất được: %s" % e)
             return {'CANCELLED'}
@@ -1084,6 +1093,7 @@ def draw_unity(L, context):
     row.enabled = st.which != 'NONE'
     row.prop(st, "combine")
     L.prop(st, "face_z")
+    L.prop(st, "tpose")
     row = L.row(align=True)
     row.operator("srp.unity_check", icon='VIEWZOOM')
     row.operator("srp.unity_map_edit", text="", icon='TEXT')
@@ -1118,6 +1128,12 @@ UNITY_CS = r'''// Sinh bởi Rig Tẩm Hành (Blender). Đặt trong một thư 
 //   <tên>@<clip>.fbx    -> animation, dùng lại Avatar của <tên>.fbx
 // Lần import đầu đọc cây transform, xong đặt lại importer rồi tự import lại
 // một lần; lần sau chỉ làm lại khi json đổi.
+//
+// Avatar dựng từ T-POSE (như nút Enforce T-Pose của Unity): tay ngang, cẳng
+// tay, bàn tay và bốn ngón thẳng theo tay, chân thẳng đứng. Tư thế nghỉ trong
+// Blender thường hơi chữ A, gối hơi gập -- dựng Avatar thẳng từ đó thì mọi
+// animation retarget sang đều lệch một góc cố định. Mô hình không bị đổi
+// dáng: chỉ tư thế tham chiếu của Avatar. Json có "keep_rest_pose": true thì bỏ qua.
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1126,17 +1142,58 @@ using UnityEngine;
 
 public class RigTamHanhHumanoidImporter : AssetPostprocessor
 {
-    const string Marker = "RigTamHanhHumanoid:v1:";
-    // Dấu của script import bản trước 1.23. Coi như đã xử lý, để project còn
-    // sót script cũ không import qua lại vô tận. Xoá script cũ đi là đủ.
-    const string LegacyMarker = "SmartRigHumanoid:v1:";
+    // v2: Avatar dựng từ T-pose -- file import bằng v1 tự dựng lại một lần.
+    const string Marker = "RigTamHanhHumanoid:v2:";
 
     [System.Serializable] public class Pair { public string human; public string bone; }
     [System.Serializable] public class Clip { public string name; public bool loop; public int first; public int last; public bool face; public int start; }
     [System.Serializable] public class Map
     {
         public int version; public string character; public bool keep_extra; public bool combined; public float fps;
+        public bool keep_rest_pose;
         public Pair[] human; public Clip[] clips;
+    }
+
+    // Script import Humanoid khác (bản cũ còn sót) cùng xử lý FBX thì hai bên
+    // đóng dấu khác nhau và import lại nhau vô tận. Có thì dừng, báo xoá.
+    static string OtherImporter()
+    {
+        var other = TypeCache.GetTypesDerivedFrom<AssetPostprocessor>()
+            .FirstOrDefault(t => t != typeof(RigTamHanhHumanoidImporter) && t.Name.EndsWith("HumanoidImporter"));
+        return other == null ? null : other.Name;
+    }
+
+    static void Align(Transform bone, Transform child, Vector3 dir)
+    {
+        if (bone == null || child == null) return;
+        Vector3 cur = child.position - bone.position;
+        if (cur.sqrMagnitude < 1e-12f) return;
+        bone.rotation = Quaternion.FromToRotation(cur, dir) * bone.rotation;
+    }
+
+    // Đưa cây transform về T-pose: chỉ xoay quanh đầu xương, theo thứ tự cha
+    // trước con, nên chiều dài xương và mọi thứ khác giữ nguyên.
+    static void EnforceTPose(Dictionary<string, Transform> H)
+    {
+        System.Func<string, Transform> T = n => H.TryGetValue(n, out var t) ? t : null;
+        Transform lu = T("LeftUpperArm"), ru = T("RightUpperArm");
+        Vector3 right = (lu != null && ru != null) ? ru.position - lu.position : Vector3.right;
+        right.y = 0f;
+        right = right.sqrMagnitude > 1e-8f ? right.normalized : Vector3.right;
+        foreach (var side in new[] { "Left", "Right" })
+        {
+            Vector3 dir = side == "Left" ? -right : right;
+            Align(T(side + "UpperArm"), T(side + "LowerArm"), dir);
+            Align(T(side + "LowerArm"), T(side + "Hand"), dir);
+            Align(T(side + "Hand"), T(side + " Middle Proximal") ?? T(side + " Index Proximal"), dir);
+            foreach (var f in new[] { "Index", "Middle", "Ring", "Little" })
+            {
+                Align(T(side + " " + f + " Proximal"), T(side + " " + f + " Intermediate"), dir);
+                Align(T(side + " " + f + " Intermediate"), T(side + " " + f + " Distal"), dir);
+            }
+            Align(T(side + "UpperLeg"), T(side + "LowerLeg"), Vector3.down);
+            Align(T(side + "LowerLeg"), T(side + "Foot"), Vector3.down);
+        }
     }
 
     static string JsonFor(string assetPath, out string baseFbx, out string clip)
@@ -1180,9 +1237,13 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
         Map map = Load(json);
         if (map == null) return;
         var imp = (ModelImporter)assetImporter;
-        bool done = imp.userData == Stamp(json)
-            || imp.userData == LegacyMarker + File.GetLastWriteTimeUtc(json).Ticks;
-        if (done && imp.animationType == ModelImporterAnimationType.Human) return;
+        if (imp.userData == Stamp(json) && imp.animationType == ModelImporterAnimationType.Human) return;
+        string other = OtherImporter();
+        if (other != null)
+        {
+            Debug.LogError("[RigTamHanh] Project còn script " + other + " cũng dựng Avatar Humanoid -- xoá nó đi rồi Reimport " + assetPath);
+            return;
+        }
 
         var all = root.GetComponentsInChildren<Transform>(true);
         var names = new HashSet<string>(all.Select(t => t.name));
@@ -1194,10 +1255,22 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
             hb.limit.useDefaultValues = true;
             human.Add(hb);
         }
+        // Tư thế tham chiếu của Avatar = T-pose; cây transform trả lại như cũ ngay
+        // sau khi chép, nên mô hình import ra vẫn đúng dáng trong Blender.
+        var saved = all.ToDictionary(t => t, t => t.localRotation);
+        if (!map.keep_rest_pose)
+        {
+            var byName = new Dictionary<string, Transform>();
+            foreach (var t in all) byName[t.name] = t;
+            var H = new Dictionary<string, Transform>();
+            foreach (var hb in human) H[hb.humanName] = byName[hb.boneName];
+            EnforceTPose(H);
+        }
         var skeleton = all.Select(t => new SkeletonBone
         {
             name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale
         }).ToArray();
+        foreach (var kv in saved) kv.Key.localRotation = kv.Value;
         var paths = all.Where(t => t != root.transform)
                        .Select(t => AnimationUtility.CalculateTransformPath(t, root.transform)).ToList();
         string path = assetPath;

@@ -7,6 +7,30 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.24.0 — 2026-11-07
+
+**Avatar Unity dựng từ T-pose** (script `RigTamHanhHumanoidImporter.cs`, tuỳ
+chọn xuất "Avatar theo T-pose", mặc định bật).
+- Avatar Humanoid trước đây lấy tư thế nghỉ trong Blender làm tư thế tham chiếu.
+  Tư thế đó hơi chữ A, gối hơi gập, ngón hơi cong -- Unity coi đó là "T-pose",
+  nên mọi animation retarget sang lệch một góc cố định (giống khi bỏ qua nút
+  Enforce T-Pose của Unity).
+- Script giờ tự đưa khung xương tham chiếu về T-pose trước khi dựng Avatar:
+  bắp tay, cẳng tay, bàn tay, bốn ngón (trừ ngón cái) thẳng ngang theo hướng
+  vai; đùi, cẳng chân thẳng đứng. Chỉ xoay quanh đầu xương, cha trước con;
+  cây transform trả lại ngay -- mô hình import ra vẫn đúng dáng Blender.
+- Dấu import lên `v2`: FBX đã import bằng script trước tự dựng lại Avatar một
+  lần khi có script mới. Bỏ nhận dấu của script bản cũ; thay vào đó, project
+  còn một script `*HumanoidImporter` khác thì script mới báo lỗi và không xử lý
+  (hai script đóng dấu khác nhau sẽ import lại nhau vô tận).
+- Json: `keep_rest_pose` = true thì giữ cách cũ.
+Đo trong Unity 2022.3.62f2 (batchmode, project thử riêng): tư thế tham chiếu
+lệch khỏi T-pose -- cũ: bắp tay 5.8° (Kid 7.1°), cẳng tay 3.9°, bàn tay 9.6°,
+ngón 16.9°, cẳng chân 4.9°; mới: 0.0° mọi đoạn, cả Adult lẫn Kid. Animation
+Wave của Kid chạy trên Adult so với chính Kid, góc lệch lớn nhất: cũ 1.4°
+(bắp tay), mới 0.0° (6 đoạn tay/chân). Dáng mô hình import ra như nhau ở hai
+cách. Có script import thứ hai: báo lỗi 1 lần, không import lại.
+
 ## 1.23.0 — 2026-11-04
 
 **Đổi tên: Rig Tẩm Hành.** Tác giả: Chú Pen Tẩm Hành.
