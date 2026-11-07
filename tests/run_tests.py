@@ -47,6 +47,7 @@ TESTS = [
     ("refsync_add", "refsync_add.py", "kid_sync2.blend", [], "SMOKE", []),
     ("face_parts", "face_parts.py", "kid_face.blend", [], "SMOKE", []),
     ("facerig", "facerig.py", "kid_fk.blend", [], "SMOKE", []),
+    ("posekey_split", "posekey_split.py", "kid_facekeys.blend", [], "CHECK", []),
     ("posekey", "posekey.py", "kid_facekeys.blend", [], "SMOKE", []),
     ("mirrorkey", "mirrorkey.py", "kid_facekeys.blend", [], "SMOKE", []),
     ("fixes", "fixes.py", "kid_copy.blend", [], "SMOKE", []),

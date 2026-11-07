@@ -7,6 +7,22 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.25.0 — 2026-11-07
+
+**Pose → Shape key: "Chỉ xương đang chọn"** (`posekey.py`).
+- Chỉ lấy pose của các xương đang chọn; xương mặt khác (kể cả đang pose) tạm
+  về rest lúc đo. Tách key trái / phải: pose cả hai bên, chọn bên trái nướng
+  key trái, chọn bên phải nướng key phải. Nướng xong CHỈ xương đã dùng về rest,
+  bên còn lại giữ pose. Hộp thoại ghi lấy bao nhiêu / bỏ qua xương nào; tự bật
+  khi đang chọn một phần các xương đã pose. Không chọn gì thì báo lỗi.
+- Đọc chọn qua `context.selected_pose_bones`, ngoài Pose Mode thì `PoseBone.select`
+  (Blender 5.2 bỏ `Bone.select`).
+- Vùng một bên = vertex có weight của xương bên đó. Xương mày trong cùng có weight
+  lan qua giữa trán thì key bên đó cũng kéo phần giữa trán ấy -- đúng như weight.
+Đo trên Kid (bài `posekey_split`, 4 xương mày mỗi bên): key trái động 8.15 mm ở
+vùng mày trái, ngoài vùng 0.00000 mm; key phải 8.26 mm / 0.00000 mm; trái +
+phải lệch 0.0003 mm so với nướng cả hai; tắt tuỳ chọn: y hệt trước (0.00000 mm).
+
 ## 1.24.0 — 2026-11-07
 
 **Avatar Unity dựng từ T-pose** (script `RigTamHanhHumanoidImporter.cs`, tuỳ

@@ -225,6 +225,8 @@ HELP = {
         "Pose xương mặt trong Pose Mode rồi bấm Pose → Shape key:",
         "tạo key mới (đặt tên) hoặc ghi đè một key có sẵn.",
         "Chỉ lấy pose các xương con của Head; tay, cổ, đầu không bị nướng vào.",
+        "Chỉ xương đang chọn: pose cả hai bên, chọn bên trái -> nướng key trái,",
+        "chọn bên phải -> nướng key phải. Xương không chọn tạm về rest lúc đo.",
         "'Tạo luôn bản đối xứng' ra cả bên kia trong một lần bấm.",
         "Đối xứng L ↔ R: lật key sang bên kia (tên tự đổi L/R),",
         "hoặc chép nửa này sang nửa kia ngay trong key.",

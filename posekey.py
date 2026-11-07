@@ -6,6 +6,9 @@ posed - evaluated rest). Hai điều khác:
 - Chỉ lấy pose của XƯƠNG MẶT (con cháu của bone Head). Tay, cổ, chính bone Head
   đang pose dở thì bị đưa về rest lúc đo -- không thì cả cái đầu nghiêng hay
   cánh tay giơ lên sẽ bị nướng vào key biểu cảm.
+- "Chỉ xương đang chọn": chỉ lấy pose của các xương đang chọn, xương khác
+  tạm về rest lúc đo -- pose cả hai bên rồi chọn bên trái nướng key trái,
+  chọn bên phải nướng key phải. Nướng xong chỉ xương vừa dùng về rest.
 - Key làm tay KHÔNG ghi vào bản kê khai `srp_face`, nên "Dựng bộ shape key" lần
   sau không xoá nó. Ghi đè lên key của addon thì giữ nguyên cờ cũ (dựng lại sẽ
   thay lại key ấy -- báo ra cho người dùng biết).
@@ -42,6 +45,16 @@ def face_bones(arm):
 def posed(arm, names=None):
     return [pb.name for pb in arm.pose.bones
             if (names is None or pb.name in names) and pb.matrix_basis != Matrix()]
+
+
+def selected(context, arm):
+    """Tên các pose bone đang chọn của `arm`."""
+    sel = getattr(context, "selected_pose_bones", None)
+    if sel:
+        return {pb.name for pb in sel if pb.id_data is arm}
+    # ngoài Pose Mode (gọi từ script, panel Object Mode): đọc cờ trên bone
+    return {pb.name for pb in arm.pose.bones
+            if getattr(pb, "select", None) or getattr(pb.bone, "select", False)}
 
 
 def rig_and_mesh(context):
@@ -98,6 +111,12 @@ class FACESHAPES_OT_pose_to_key(Operator):
         default='NEW')
     key_name: StringProperty(name="Tên", default="Pose")
     target: EnumProperty(name="Shape key", items=key_items)
+    selected_only: BoolProperty(
+        name="Chỉ xương đang chọn", default=False,
+        description="Chỉ lấy pose của các xương đang chọn; xương mặt khác "
+                    "(kể cả đang pose) tạm về rest lúc đo. Pose cả hai bên, chọn "
+                    "bên trái nướng key trái, rồi chọn bên phải nướng key phải. "
+                    "Nướng xong chỉ xương đã dùng về rest")
     face_only: BoolProperty(
         name="Chỉ xương mặt", default=True,
         description="Chỉ lấy pose các xương con của Head. Tay, cổ, đầu đang "
@@ -127,6 +146,11 @@ class FACESHAPES_OT_pose_to_key(Operator):
         act = mesh.active_shape_key
         if act is not None and act.name != 'Basis':
             self.target = act.name
+        # Đang chọn một phần các xương đã pose -> mặc định chỉ lấy phần đó
+        arm, _m = rig_and_mesh(context)
+        moved = set(posed(arm, face_bones(arm)))
+        sel = selected(context, arm) & moved
+        self.selected_only = bool(sel) and sel != moved
         return context.window_manager.invoke_props_dialog(self, width=320)
 
     def draw(self, context):
@@ -140,6 +164,20 @@ class FACESHAPES_OT_pose_to_key(Operator):
             L.prop(self, "target")
         else:
             L.label(text="Nhân vật chưa có shape key nào để ghi đè", icon='ERROR')
+        arm, _m = rig_and_mesh(context)
+        moved = posed(arm, face_bones(arm) if self.face_only else None)
+        sel = selected(context, arm)
+        L.prop(self, "selected_only")
+        col = L.column(align=True)
+        col.scale_y = 0.8
+        if self.selected_only:
+            use = [n for n in moved if n in sel]
+            col.label(text="Lấy %d / %d xương đang pose" % (len(use), len(moved)),
+                      icon='CHECKMARK' if use else 'ERROR')
+            skip = [n for n in moved if n not in sel]
+            if skip:
+                col.label(text="Bỏ qua: " + ", ".join(skip[:4]) + (" ..." if len(skip) > 4 else ""),
+                          icon='HIDE_ON')
         L.prop(self, "face_only")
         L.prop(self, "reset_pose")
         L.prop(self, "mirror_too")
@@ -173,10 +211,18 @@ class FACESHAPES_OT_pose_to_key(Operator):
                 return {'CANCELLED'}
 
         keep = face_bones(arm) if self.face_only else None
+        if self.selected_only:
+            sel = selected(context, arm)
+            if not sel:
+                self.report({'ERROR'}, "Chưa chọn xương nào -- chọn các xương của bên cần nướng")
+                return {'CANCELLED'}
+            keep = sel if keep is None else keep & sel
         if not posed(arm, keep):
-            self.report({'ERROR'}, "Chưa pose xương mặt nào" if keep is not None
-                        else "Rig đang ở tư thế nghỉ")
+            self.report({'ERROR'}, ("Các xương đang chọn chưa được pose" if self.selected_only
+                                    else "Chưa pose xương mặt nào" if keep is not None
+                                    else "Rig đang ở tư thế nghỉ"))
             return {'CANCELLED'}
+        used = posed(arm, keep)
 
         targets = facerig.targets_for(arm, mesh)
         saved = {pb.name: pb.matrix_basis.copy() for pb in arm.pose.bones}
@@ -218,13 +264,15 @@ class FACESHAPES_OT_pose_to_key(Operator):
                 face.add_driver(okb, src, name)
 
         if self.reset_pose:
-            for n in posed(arm, keep):
+            for n in used:
                 arm.pose.bones[n].matrix_basis = Matrix()
             context.view_layer.update()
 
         mesh.active_shape_key_index = list(src.key_blocks).index(kb)
         msg = "%s shape key '%s' trên %s" % (
             "Đã tạo" if self.mode == 'NEW' else "Đã ghi đè", name, mesh.name)
+        if self.selected_only:
+            msg += " | từ %d xương đang chọn" % len(used)
         if others:
             msg += " + %s (driver theo %s)" % (", ".join(others), mesh.name)
         level = {'INFO'}
@@ -251,9 +299,13 @@ def draw_pose_key(L, context):
     r.operator("face_shapes.pose_to_key", icon='SHAPEKEY_DATA')
     if arm is not None and mesh is not None:
         keep = face_bones(arm)
-        n = len(posed(arm, keep))
+        moved = posed(arm, keep)
+        n = len(moved)
         L.label(text="%s → %s | %d xương mặt đang pose" % (arm.name, mesh.name, n),
                 icon='ARMATURE_DATA' if n else 'INFO')
+        sel = selected(context, arm) & set(moved)
+        if sel and len(sel) < n:
+            L.label(text="Đang chọn %d -> nướng riêng phần đã chọn" % len(sel), icon='RESTRICT_SELECT_OFF')
     L.operator("face_shapes.mirror_key", icon='MOD_MIRROR')
 
 

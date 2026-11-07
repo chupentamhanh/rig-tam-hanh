@@ -151,6 +151,11 @@ Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng �
 - **Kiểm định bộ shape key**: soi lỗi rách, gập lưới, nhãn cầu lộ khi chớp mắt.
 - **Pose → Shape key**: pose xương mặt theo ý, bấm để lưu thành shape key mới (mesh phụ như
   lông mày đi theo bằng driver).
+  - **Chỉ xương đang chọn**: chỉ lấy pose của những xương đang chọn, xương khác tạm về tư thế
+    nghỉ lúc đo. Cách tách key trái / phải: pose cả hai bên → chọn các xương bên trái → nướng
+    `..._L` → chọn các xương bên phải → nướng `..._R`. Nướng xong chỉ xương đã dùng về nghỉ,
+    bên còn lại vẫn giữ pose. Hai key cộng lại đúng bằng key nướng cả hai bên cùng lúc.
+    Tuỳ chọn tự bật khi bạn đang chọn một phần các xương đã pose.
 - **Đối xứng shape key L ↔ R**: làm một bên, chép sang bên kia theo cặp vertex đối xứng.
 - **Thử biểu cảm**: bấm thử các biểu cảm mẫu (vui, buồn, ngạc nhiên…).
 
