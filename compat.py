@@ -29,6 +29,10 @@ def action_slot_for(action, id_):
     current = getattr(getattr(id_, "animation_data", None), "action_slot", None)
     if current is not None and current in slots:
         return current
+    for slot in slots:
+        users = getattr(slot, "users", None)
+        if users is not None and id_ in users():
+            return slot
 
     pose = getattr(id_, "pose", None)
     if pose is not None:

@@ -42,6 +42,7 @@ TESTS = [
     ("unity_import", "unity_import.py", None, ["{shared}/unity"], "SMOKE", []),
     ("unity_export_combined", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity_c", "combine"], "SMOKE", []),
     ("unity_import_combined", "unity_import_combined.py", None, ["{shared}/unity_c"], "SMOKE", []),
+    ("unity_clips", "unity_clips.py", "kid_facekeys.blend", ["{out}"], "CHECK", []),
     ("generate", "generate.py", "kid_copy.blend", [], "SMOKE", []),
     ("refsync", "refsync.py", "kid_sync.blend", [], "SMOKE", []),
     ("refsync_add", "refsync_add.py", "kid_sync2.blend", [], "SMOKE", []),

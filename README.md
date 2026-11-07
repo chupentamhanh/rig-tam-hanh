@@ -186,11 +186,15 @@ Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng �
 
 1. Chọn rig, thư mục xuất (chọn thẳng một thư mục trong `Assets/` của project Unity là
    tiện nhất) và tên nhân vật.
-2. **Kiểm tra Humanoid**: báo xương nào thiếu hay sai trước khi xuất.
-3. **Xuất FBX cho Unity**: ra `<tên>.fbx` (mô hình), `<tên>@<action>.fbx` (mỗi animation một
+2. Chọn clip: để *Các clip được tích*, danh sách bên dưới hiện mọi animation clip có **slot**
+   dành cho rig (slot rig đang dùng, slot trùng tên rig, hoặc slot có kênh trỏ vào xương của rig),
+   kèm khoảng frame. Tích clip nào thì clip đó được xuất; hai nút ☑ / ☐ để tích hết / bỏ hết.
+   Lựa chọn lưu ngay trên từng action nên mở lại file vẫn nhớ. Mặc định mọi clip đều được tích.
+3. **Kiểm tra Humanoid**: báo xương nào thiếu hay sai trước khi xuất, kèm clip nào sẽ bị bỏ.
+4. **Xuất FBX cho Unity**: ra `<tên>.fbx` (mô hình), `<tên>@<action>.fbx` (mỗi animation một
    file, hoặc *Gộp animation vào file nhân vật*), `<tên>.humanoid.json` (bảng ánh xạ) và
    script `RigTamHanhHumanoidImporter.cs`.
-4. Nếu thư mục xuất nằm trong project Unity, script tự vào `Assets/Editor/RigTamHanh`; không
+5. Nếu thư mục xuất nằm trong project Unity, script tự vào `Assets/Editor/RigTamHanh`; không
    thì chép nó vào một thư mục `Editor` bất kỳ. Unity import FBX thành Humanoid với đúng bảng
    ánh xạ — không dùng auto-map.
 

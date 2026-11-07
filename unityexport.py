@@ -245,16 +245,38 @@ def rig_meshes(arm):
     return skinned, attached
 
 
-def rig_actions(arm):
-    """Action dành cho rig này: phần lớn kênh trỏ vào bone có thật."""
+def rig_clips(arm):
+    """[(action, slot)] -- clip dành cho rig này, đọc theo SLOT của action: slot
+    rig đang / đã dùng, slot trùng tên rig, hoặc slot OBJECT có phần lớn kênh
+    trỏ vào bone có thật của rig. Action chỉ có slot shape key thì bỏ qua."""
     names = {b.name for b in arm.data.bones}
     out = []
     for a in bpy.data.actions:
-        bones = {compat.bone_of(fc.data_path) for fc in compat.action_fcurves(a)}
-        bones.discard(None)
-        if bones and len(bones & names) >= .5 * len(bones):
-            out.append(a)
-    return out
+        hit = None
+        for s in a.slots:
+            if s.target_id_type not in ('OBJECT', 'UNSPECIFIED'):
+                continue
+            users = getattr(s, "users", None)
+            if (users is not None and arm in users()) or s.name_display == arm.name:
+                hit = s
+                break
+            bones = {compat.bone_of(fc.data_path) for fc in compat.action_fcurves(a, s)}
+            bones.discard(None)
+            if hit is None and bones and len(bones & names) >= .5 * len(bones):
+                hit = s
+        if hit is not None:
+            out.append((a, hit))
+    return sorted(out, key=lambda p: p[0].name.lower())
+
+
+def rig_actions(arm):
+    """Action dành cho rig này (xem rig_clips)."""
+    return [a for a, _s in rig_clips(arm)]
+
+
+def picked_actions(arm):
+    """Clip được tích "Xuất" trong danh sách của panel."""
+    return [a for a in rig_actions(arm) if getattr(a, "srp_unity_export", True)]
 
 
 def driven_into(meshes):
@@ -332,14 +354,18 @@ def check(arm):
     for o in attached:
         notes.append("%s gắn vào bone %s -- sẽ skin 100%% vào bone đó" % (o.name, o.parent_bone))
 
-    acts = rig_actions(arm)
+    every = rig_actions(arm)
+    acts = picked_actions(arm)
     for a in acts:
         for fc in compat.action_fcurves(a):
             if fc.data_path.endswith('.scale') and compat.curve_amplitude(fc) > 1e-4:
                 warns.append("%s: có animation scale bone (%s) -- Humanoid bỏ qua scale"
                              % (a.name, compat.bone_of(fc.data_path)))
                 break
-    notes.append("%d action cho rig này: %s" % (len(acts), ", ".join(a.name for a in acts) or "--"))
+    notes.append("%d clip cho rig này, xuất %d: %s" % (len(every), len(acts), ", ".join(a.name for a in acts) or "--"))
+    skip = [a.name for a in every if a not in acts]
+    if skip:
+        notes.append("Bỏ không xuất: " + ", ".join(skip))
     extra = sorted(b.name for b in B if b.use_deform and b.name not in used)
     notes.append("%d bone Humanoid, %d bone thêm (mặt, tai, Palm...) đi theo dạng transform phụ"
                  % (len(m), len(extra)))
@@ -844,7 +870,7 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
         raise ValueError("; ".join(errors))
     os.makedirs(folder, exist_ok=True)
     skinned, attached = rig_meshes(arm)
-    acts = rig_actions(arm)
+    acts = picked_actions(arm)
     if which == 'NONE':
         acts = []
     elif which == 'ACTIVE':
@@ -961,7 +987,9 @@ class SRP_UnitySettings(PropertyGroup):
                          description="Để trống thì lấy theo tên rig")
     which: EnumProperty(
         name="Animation",
-        items=(('ALL', "Mọi action của rig", "Mỗi action ra một file <tên>@<action>.fbx"),
+        items=(('ALL', "Các clip được tích",
+                "Chỉ xuất các clip được tích trong danh sách bên dưới -- mỗi clip ra "
+                "một file <tên>@<clip>.fbx (hoặc một take nếu gộp)"),
                ('ACTIVE', "Chỉ action đang gán", ""),
                ('NONE', "Không xuất animation", "Chỉ mô hình + Avatar")),
         default='ALL')
@@ -1073,6 +1101,48 @@ class SRP_OT_unity_export(Operator):
         return {'FINISHED'}
 
 
+class SRP_OT_unity_clips(Operator):
+    """Tích / bỏ tích mọi clip của rig trong danh sách xuất"""
+    bl_idname = "srp.unity_clips"
+    bl_label = "Chọn clip"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    value: BoolProperty(default=True)
+
+    def execute(self, context):
+        arm = _rig(context)
+        if arm is None:
+            return {'CANCELLED'}
+        for a in rig_actions(arm):
+            a.srp_unity_export = self.value
+        return {'FINISHED'}
+
+
+def draw_clips(L, arm):
+    clips = rig_clips(arm)
+    box = L.box()
+    if not clips:
+        box.label(text="Không có clip nào có slot cho %s" % arm.name, icon='INFO')
+        return
+    n = sum(1 for a, _s in clips if a.srp_unity_export)
+    head = box.row(align=True)
+    head.label(text="Clip của %s: xuất %d / %d" % (arm.name, n, len(clips)), icon='ACTION')
+    head.operator("srp.unity_clips", text="", icon='CHECKBOX_HLT').value = True
+    head.operator("srp.unity_clips", text="", icon='CHECKBOX_DEHLT').value = False
+    cur = arm.animation_data.action if arm.animation_data else None
+    col = box.column(align=True)
+    for a, s in clips:
+        row = col.row(align=True)
+        row.prop(a, "srp_unity_export", text=a.name)
+        sub = row.row(align=True)
+        sub.alignment = 'RIGHT'
+        f0, f1 = (int(round(x)) for x in a.frame_range)
+        info = "%d–%d" % (f0, f1)
+        if s.name_display != arm.name:
+            info += " · slot %s" % s.name_display
+        sub.label(text=info, icon='PLAY' if a is cur else 'BLANK1')
+
+
 def draw_unity(L, context):
     st = context.scene.srp_unity
     arm = _rig(context)
@@ -1089,6 +1159,8 @@ def draw_unity(L, context):
         note.label(text="Để trống → tên %r" % default_name(arm), icon='DOT')
     L.prop(st, "only_human")
     L.prop(st, "which", text="")
+    if st.which == 'ALL' and arm is not None:
+        draw_clips(L, arm)
     row = L.row()
     row.enabled = st.which != 'NONE'
     row.prop(st, "combine")
@@ -1104,18 +1176,23 @@ def draw_unity(L, context):
 
 
 CLASSES = (SRP_UnitySettings, SRP_OT_unity_check, SRP_OT_unity_map_edit,
-           SRP_OT_unity_export)
+           SRP_OT_unity_export, SRP_OT_unity_clips)
 
 
 def register_extra():
     bpy.types.Scene.srp_unity = PointerProperty(type=SRP_UnitySettings)
+    # Lưu trên chính action: mở lại file vẫn nhớ clip nào bỏ ra
+    bpy.types.Action.srp_unity_export = BoolProperty(
+        name="Xuất sang Unity", default=True,
+        description="Tích: clip này được xuất khi chọn 'Các clip được tích'")
 
 
 def unregister_extra():
-    try:
-        del bpy.types.Scene.srp_unity
-    except AttributeError:
-        pass
+    for owner, attr in ((bpy.types.Scene, "srp_unity"), (bpy.types.Action, "srp_unity_export")):
+        try:
+            delattr(owner, attr)
+        except AttributeError:
+            pass
 
 
 # ============================================================ script Unity

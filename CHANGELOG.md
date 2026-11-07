@@ -7,6 +7,26 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.27.0 — 2026-11-07
+
+**Xuất Unity: chọn clip nào xuất** (`unityexport.rig_clips`, `srp.unity_clips`).
+- Mục animation "Các clip được tích" (thay "Mọi action của rig") hiện danh sách
+  clip của rig kèm ô tích, khoảng frame, dấu ▶ ở clip đang gán, nút tích hết /
+  bỏ hết, và "xuất N / M".
+- Danh sách đọc theo SLOT của action: slot rig đang / đã dùng (`slot.users()`),
+  slot trùng tên rig, hoặc slot OBJECT có từ một nửa kênh trỏ vào bone có thật
+  của rig. Action chỉ có slot shape key, hay slot của object khác, không hiện.
+  Trước đây chỉ đoán theo tên bone trong toàn action.
+- Ô tích là thuộc tính của chính action (`Action.srp_unity_export`, mặc định
+  bật) -- lưu trong file, mở lại vẫn nhớ; file cũ xuất y như trước.
+- `compat.action_slot_for` ưu tiên slot mà chính rig đang dùng, nên lúc xuất
+  gán đúng slot đã hiện trong danh sách.
+- "Kiểm tra Humanoid" ghi số clip xuất / tổng và tên clip bị bỏ.
+Bài `unity_clips` (10/10): 4 action (slot đang dùng, slot trùng tên, slot lạ có
+kênh bone, slot object khác) -> danh sách đúng 3; bỏ tích 1 -> file riêng chỉ
+ra 2 clip, json và chế độ gộp cũng 2; bỏ hết -> chỉ mô hình; rig được trả lại
+đúng action + slot đang gán.
+
 ## 1.26.0 — 2026-11-07
 
 **Mesh phụ bám da** (`followkeys.py`, nút "Mesh phụ bám da" ở khu Mặt).
