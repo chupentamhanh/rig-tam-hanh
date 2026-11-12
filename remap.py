@@ -159,7 +159,7 @@ def read_plan(rig):
     """[(cu, moi)] tu text block, kem danh sach dong loi."""
     text = bpy.data.texts.get(TEXT_NAME)
     if text is None:
-        return [], ["chưa có text %r — bấm 'Quét channel mồ côi' trước" % TEXT_NAME]
+        return [], ["chưa có text %r — bấm 'Tìm animation trỏ vào xương đã mất' trước" % TEXT_NAME]
 
     names = {bone.name for bone in rig.data.bones}
     pairs, problems = [], []
@@ -252,9 +252,9 @@ def apply_plan(context, rig, pairs, actions, dry_run=True):
 # ------------------------------------------------------------- operators
 
 class SRP_OT_remap_scan(bpy.types.Operator):
-    "Quét channel mồ côi và ghi kế hoạch đổi tên ra text block"
+    "Tìm animation trỏ vào xương đã mất và ghi kế hoạch đổi tên ra text block"
     bl_idname = "srp.remap_scan"
-    bl_label = "Quét channel mồ côi"
+    bl_label = "Tìm animation trỏ vào xương đã mất"
     bl_options = {'REGISTER'}
 
     @classmethod
@@ -278,7 +278,7 @@ class SRP_OT_remap_scan(bpy.types.Operator):
 class SRP_OT_remap_apply(bpy.types.Operator):
     "Đọc kế hoạch từ text block và đổi tên channel"
     bl_idname = "srp.remap_apply"
-    bl_label = "Áp dụng kế hoạch"
+    bl_label = "Sửa animation theo bảng đổi tên"
     bl_options = {'REGISTER', 'UNDO'}
 
     dry_run: BoolProperty(

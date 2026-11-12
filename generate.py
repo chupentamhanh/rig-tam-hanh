@@ -621,7 +621,7 @@ class SRP_OT_generate(bpy.types.Operator):
 class SRP_OT_bind(bpy.types.Operator):
     "Skin mesh vào rig bằng automatic weights"
     bl_idname = "srp.bind"
-    bl_label = "Bind mesh"
+    bl_label = "Bind mesh thân"
     bl_options = {'REGISTER', 'UNDO'}
 
     face_weights: BoolProperty(
@@ -640,6 +640,20 @@ class SRP_OT_bind(bpy.types.Operator):
         settings = getattr(context.scene, "srp_generate", None)
         return (settings is not None and settings.target_mesh is not None
                 and rigdef.active_rig(context) is not None)
+
+    def invoke(self, context, event):
+        mesh = context.scene.srp_generate.target_mesh
+        rig = rigdef.active_rig(context)
+        if not cloth.deformed_by(mesh, rig):
+            return self.execute(context)
+        hand = len(cloth.hand_painted(mesh))
+        msg = "Toàn bộ weight của %s và quần áo sẽ bị tính lại từ đầu." % mesh.name
+        if hand:
+            msg += " Mất luôn %d vertex bạn đã vẽ tay." % hand
+        msg += " Chỉ muốn chép weight thân sang quần áo thì dùng 'Cập nhật quần áo'."
+        return context.window_manager.invoke_confirm(
+            self, event, title="Bind lại từ đầu?", message=msg, confirm_text="Bind lại",
+            icon='ERROR')
 
     def execute(self, context):
         settings = context.scene.srp_generate
@@ -859,7 +873,7 @@ class SRP_GenerateSettings(bpy.types.PropertyGroup):
     # Quan ao / toc / phu kien la mesh RIENG — xem `cloth.py`.
     cloth_meshes: CollectionProperty(name="Quần áo, phụ kiện", type=cloth.SRP_ClothMesh)
     skin_follow: BoolProperty(
-        name="Da dưới áo đi theo áo", default=True,
+        name="Sửa da dưới áo theo áo (đổi weight thân)", default=True,
         description="Da bị quần áo che lấy trọng số của áo ngay phía trên -- da "
                     "không đâm xuyên áo khi gập tay, cúi người. Da lộ ra ngoài, "
                     "đầu và bàn tay không bị đổi")

@@ -125,6 +125,10 @@ class FACESHAPES_OT_pose_to_key(Operator):
         name="Trả xương mặt về rest", default=True,
         description="Xong thì đưa xương mặt về tư thế nghỉ, để khỏi cộng đôi "
                     "pose với shape key vừa tạo")
+    follow_skin: BoolProperty(
+        name="Lông mày / râu rời bám da", default=True,
+        description="Lông mày, râu, mi rời bám theo key vừa nướng theo đúng da bên "
+                    "dưới (thay vì theo xương)")
     mirror_too: BoolProperty(
         name="Tạo luôn bản đối xứng", default=False,
         description="Lật key vừa nướng sang bên kia, tên tự đổi L <-> R "
@@ -180,6 +184,7 @@ class FACESHAPES_OT_pose_to_key(Operator):
                           icon='HIDE_ON')
         L.prop(self, "face_only")
         L.prop(self, "reset_pose")
+        L.prop(self, "follow_skin")
         L.prop(self, "mirror_too")
         if self.mirror_too:
             from . import mirrorkey
@@ -288,6 +293,14 @@ class FACESHAPES_OT_pose_to_key(Operator):
                 level = {'WARNING'}
                 msg += " (%d vertex lệch cặp)" % off
             mesh.active_shape_key_index = list(src.key_blocks).index(kb)
+        if self.follow_skin:
+            from . import ux
+            names = {name}
+            if self.mirror_too:
+                names.add(dst)
+            lines = ux.follow_all(context, mesh, names=names)
+            if lines:
+                msg += " | " + ", ".join(lines)
         self.report(level, msg)
         return {'FINISHED'}
 

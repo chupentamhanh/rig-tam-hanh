@@ -7,6 +7,35 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.28.0 — 2026-11-12
+
+**Dễ dùng hơn: gom nút, hỏi lại trước khi ghi đè, thanh "Bước tiếp theo"**
+(`ux.py`). Các toán tử cũ vẫn còn (script / bài test gọi thẳng), chỉ không bày
+trên panel.
+- **Sửa weight…** (`srp.weights_fix`): một menu thay 5 nút -- Tự làm mượt weight
+  các khớp (Delta Mush), Sửa hông / gối / khuỷu, Sửa hông và gối, Lấp chỗ thiếu.
+- **Cập nhật quần áo** (`srp.cloth_update`): thay "Bind quần áo" + "Cập nhật
+  weight từ thân". Bind món mới / gắn cứng / automatic, chép weight thân (đúng
+  như đang có) sang món chép-từ-thân và lông mày; "Sửa da dưới áo theo áo" nằm
+  trong hộp thoại, ghi rõ là đổi weight thân (vertex vẽ tay giữ). Không còn dải
+  hông / gối riêng trên quần áo (đo trước đây: chép thẳng ít đâm xuyên hơn).
+- Lông mày / râu rời tự bám da sau **Dựng bộ shape key** và **Pose → Shape key**
+  (tuỳ chọn, mặc định bật); mesh phụ ghi lại bộ key đã bám (`srp_follow_keys`).
+- Hỏi lại trước khi ghi đè: Bind mesh thân (khi đã bind: báo mất weight + số
+  vertex vẽ tay), Dựng bộ shape key (khi đã có: số key của addon bị dựng lại /
+  key làm tay được giữ), các mục tính lại weight của "Sửa weight…".
+- Thanh **Bước tiếp theo** dưới thanh khu: bước dựng còn thiếu -> quần áo chưa
+  bind -> thân sửa weight, quần áo chưa cập nhật -> lông mày chưa bám key mặt
+  mới -> (tuỳ chọn) dựng shape key mặt -> sẵn sàng xuất. Bấm là mở đúng chỗ / làm.
+- Đổi tên cho dễ hiểu: Tự làm mượt weight các khớp, Lông mày / râu rời bám da,
+  Đánh dấu vùng mặt, Đo khuôn mặt (tự động), Bind mesh thân, Chỉnh lại vị trí
+  xương của rig, Tìm animation trỏ vào xương đã mất, Sửa animation theo bảng đổi
+  tên, Sửa tay bảng ghép xương Humanoid. Viết lại hướng dẫn "?" của quần áo và
+  trọng số.
+Bài `ux` (14/14): Sửa weight… giữ 644 vertex vẽ tay; Cập nhật quần áo bind món
+mới, thân không đổi khi tắt sửa da, bật thì 275 vertex da đổi và vertex vẽ tay
+giữ; thanh gợi ý đúng việc; Pose -> Shape key xong lông mày hết bị báo.
+
 ## 1.27.0 — 2026-11-07
 
 **Xuất Unity: chọn clip nào xuất** (`unityexport.rig_clips`, `srp.unity_clips`).

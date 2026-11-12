@@ -311,7 +311,7 @@ class SRP_OT_bake_weights(bpy.types.Operator):
     sát hình Delta Mush -- vai, nách, mông, khuỷu mượt hơn, ít phải vẽ tay.
     Vertex vẽ tay giữ nguyên. Chạy sau Bind, trước khi chỉnh tay"""
     bl_idname = "srp.bake_weights"
-    bl_label = "Tối ưu weight (Delta Mush)"
+    bl_label = "Tự làm mượt weight các khớp"
     bl_options = {'REGISTER', 'UNDO'}
 
     limit4: bpy.props.BoolProperty(

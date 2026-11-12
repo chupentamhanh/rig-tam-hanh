@@ -1047,7 +1047,7 @@ class SRP_OT_unity_check(Operator):
 
 class SRP_OT_unity_map_edit(Operator):
     bl_idname = "srp.unity_map_edit"
-    bl_label = "Tạo bảng sửa ánh xạ"
+    bl_label = "Sửa tay bảng ghép xương Humanoid"
     bl_description = ("Ghi bảng ánh xạ hiện tại vào text block %s để sửa tay. "
                       "Dòng 'LeftHand = TênBone'; để trống sau dấu = là bỏ bone đó" % MAP_TEXT)
 

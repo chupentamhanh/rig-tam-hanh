@@ -49,6 +49,14 @@ git clone https://github.com/chupentamhanh/rig-tam-hanh.git "%APPDATA%\Blender F
 
 ## Hướng dẫn sử dụng
 
+<img src="docs/images/next_step.png" width="420" align="right">
+
+**Thanh "Bước tiếp theo"** nằm ngay dưới thanh khu: nó nhắc việc nên làm tiếp — bước dựng rig
+chưa xong, quần áo chưa bind, thân đã sửa weight mà quần áo chưa cập nhật, lông mày chưa bám
+theo key mặt mới… — bấm vào là mở đúng chỗ hoặc làm luôn. Hết việc thì nó báo sẵn sàng xuất.
+
+<br clear="right">
+
 Tab **Rig Tẩm Hành** chia làm 5 khu, theo đúng thứ tự làm việc:
 **Dựng → Mặt → Diễn → Xuất → Sửa**. Mỗi lúc chỉ hiện panel của một khu. Vào Pose Mode thì
 addon tự chuyển sang khu Diễn. Nút **?** ở mỗi panel mở hướng dẫn ngắn ngay trong Blender.
@@ -89,7 +97,7 @@ dài…). Kéo các xương ref vào đúng chỗ trên mesh.
 
 **Bước 4 · Dựng rig + widget** — sinh rig hoàn chỉnh: xương deform, FK/IK, pole, công tắc
 FK/IK, bone shape tự ôm theo thân. Muốn chỉnh vị trí xương của rig đã dựng (kể cả sau khi
-bind): bấm **Dựng lại bộ ref từ rig** ở bước 2, kéo xương ref, rồi áp lại — chỉ những xương
+bind): bấm **Chỉnh lại vị trí xương của rig** ở bước 2, kéo xương ref, rồi áp lại — chỉ những xương
 bạn đã di chuyển thay đổi, weight giữ nguyên.
 
 **Bước 5 · Nhóm vùng khuôn mặt** *(tuỳ chọn)* — đánh dấu môi, mí, răng… để bước bind tô
@@ -99,17 +107,22 @@ weight mặt chính xác và bước 7 dựng shape key.
 
 **Bước 6 · Bind skin**
 
-- **Bind mesh**: skin mesh thân vào rig (automatic weights, hoặc chép từ nhân vật mẫu).
-  Xương hàm, mắt, răng được tô riêng.
+- **Bind mesh thân**: skin mesh thân vào rig (automatic weights, hoặc chép từ nhân vật mẫu).
+  Xương hàm, mắt, răng được tô riêng. Mesh đã bind rồi thì addon hỏi lại trước, vì bind lại
+  sẽ tính lại toàn bộ weight (kể cả chỗ bạn đã vẽ tay).
 - **Quần áo, tóc, phụ kiện**: bấm *Tìm quần áo chưa bind* hoặc *Thêm đang chọn*, chọn cách
   bind cho từng món:
   - *Chép từ thân* — áo, quần, giày: lấy weight của điểm gần nhất trên da, nên gập tay
     không bị đâm xuyên.
   - *Gắn cứng* — tóc ngắn, mũ, kính: 100% vào một xương.
   - *Automatic* — đồ rộng, xa thân.
-- *Da dưới áo đi theo áo*: da bị quần áo che lấy weight của áo phía trên, chống đâm xuyên.
-- **Cập nhật weight từ thân** *(+ Tóc)*: sau khi bạn sửa weight thân, bấm nút này để chép
-  lại cho áo, quần, giày, lông mày mà **không đụng vào thân**.
+- **Cập nhật quần áo**: một nút cho mọi việc với quần áo — bind món mới thêm vào và chép lại
+  weight của thân sang áo, quần, giày, lông mày. Bấm sau khi thêm quần áo hoặc sửa weight thân;
+  panel báo đỏ khi thân đã sửa mà quần áo chưa cập nhật. Hộp thoại có hai tuỳ chọn:
+  - *Cả tóc*: tóc đang gắn cứng cũng chép weight từ thân (tóc dài chạm vai, gáy).
+  - *Sửa da dưới áo theo áo (đổi weight thân)*: da bị áo che lấy weight của áo phía trên,
+    chống đâm xuyên — tuỳ chọn này **có sửa weight thân** (trừ chỗ bạn vẽ tay). Tắt thì thân
+    giữ nguyên tuyệt đối.
 
 <br clear="right">
 
@@ -121,13 +134,17 @@ weight mặt chính xác và bước 7 dựng shape key.
 
 Ở khu **Sửa → Trọng số skin**:
 
-| Nút | Dùng khi |
+Mọi việc sửa weight thân nằm trong một menu **Sửa weight…** (mỗi mục có chú thích khi rê
+chuột; các mục tính lại weight đều hỏi lại trước, kèm số vertex vẽ tay được giữ):
+
+| Mục | Dùng khi |
 |---|---|
-| **Lấp trọng số thiếu** | Có vertex tổng weight < 1 (đứng yên khi pose). |
-| **Tối ưu weight (Delta Mush)** | Ngay sau khi bind. Cho rig qua khoảng 40 tư thế, tìm weight bám sát hình Delta Mush — vai, nách, mông, khuỷu mượt hơn. Mặc định tối đa 4 xương mỗi vertex cho Unity. |
-| **Sửa weight hông, gối, khuỷu** | Háng gập thành khe, mông gãy khi giơ chân, khoeo/lòng khuỷu móp khi gập sâu. |
-| **Chỉ hông và gối (không đụng khuỷu)** | Như trên nhưng không chạm vào tay. |
-| **Cập nhật weight từ thân** | Sau khi sửa thân: chép lại cho quần áo. Thân không bị đổi. |
+| **Tự làm mượt weight các khớp** | Ngay sau khi bind. Cho nhân vật qua khoảng 40 tư thế, tìm weight để vai, nách, mông, khuỷu gập mượt hơn (cách tính "Delta Mush"). Tối đa 4 xương mỗi vertex cho Unity. |
+| **Sửa hông, gối, khuỷu** | Háng gập thành khe, mông gãy khi giơ chân, khoeo/lòng khuỷu móp khi gập sâu. |
+| **Sửa hông và gối (không đụng tay)** | Như trên nhưng không chạm vào tay. |
+| **Lấp chỗ thiếu weight** | Có vertex tổng weight < 1 (đứng yên khi pose). |
+
+Ngay bên dưới là nút **Cập nhật quần áo** (như ở bước 6).
 
 <br clear="right">
 
@@ -139,7 +156,8 @@ khi bạn muốn addon làm lại cả chỗ đó. Bind mesh lại từ đầu t
 ![Weight Paint](docs/images/weight_paint.png)
 
 **Quy trình gợi ý cho nhân vật mới:**
-Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng → Cập nhật weight từ thân.
+Bind mesh thân → Sửa weight… / Tự làm mượt weight các khớp → vẽ tay chỗ còn chưa ưng →
+Cập nhật quần áo.
 
 ### 3. Mặt — shape key khuôn mặt
 
@@ -157,11 +175,12 @@ Bind mesh → Tối ưu weight (Delta Mush) → vẽ tay chỗ còn chưa ưng �
     bên còn lại vẫn giữ pose. Hai key cộng lại đúng bằng key nướng cả hai bên cùng lúc.
     Tuỳ chọn tự bật khi bạn đang chọn một phần các xương đã pose.
 - **Đối xứng shape key L ↔ R**: làm một bên, chép sang bên kia theo cặp vertex đối xứng.
-- **Mesh phụ bám da**: lông mày, râu, mi là mesh rời thì chỉ đi theo những key nó có. Nút này
+- **Lông mày / râu rời bám da**: lông mày, râu, mi là mesh rời thì chỉ đi theo những key nó có. Nút này
   neo từng vertex của mesh phụ vào da bên dưới và dựng lại shape key cho nó theo **mọi** key của
   mặt (key thiếu thì tạo, kèm driver), nên khi thử biểu cảm hay chạy animation, lông mày luôn
-  dán trên da. Chọn mesh phụ rồi bấm; không chọn gì thì addon lấy lông mày của nhân vật. Bấm lại
-  sau mỗi lần sửa / thêm shape key của mặt. *Làm mượt* > 0 nếu muốn lông mày bớt giãn theo da.
+  dán trên da. Chọn mesh phụ rồi bấm; không chọn gì thì addon lấy lông mày của nhân vật.
+  **Dựng bộ shape key** và **Pose → Shape key** tự làm bước này luôn; tự sửa / thêm key mặt bằng
+  tay thì thanh "Bước tiếp theo" nhắc bấm lại. *Làm mượt* > 0 nếu muốn lông mày bớt giãn theo da.
 - **Thử biểu cảm**: bấm thử các biểu cảm mẫu (vui, buồn, ngạc nhiên…).
 
 <br clear="right">

@@ -139,6 +139,8 @@ def follow(face, follower, names=None, smooth=0):
         drv = fk.animation_data.drivers.find(path) if fk.animation_data else None
         if drv is None:
             F.add_driver(have, fkey, kb.name)
+    if names is None:
+        follower["srp_follow_keys"] = sorted(kb.name for kb in list(fkey.key_blocks)[1:])
     return made, redone, skipped
 
 
@@ -147,7 +149,7 @@ class FACESHAPES_OT_follow_skin(Operator):
     thì tạo (kèm driver), key có sẵn thì ghi lại theo da. Mesh đang chọn, không
     chọn thì lấy lông mày của nhân vật"""
     bl_idname = "face_shapes.follow_skin"
-    bl_label = "Mesh phụ bám da"
+    bl_label = "Lông mày / râu rời bám da"
     bl_options = {'REGISTER', 'UNDO'}
 
     smooth: bpy.props.IntProperty(

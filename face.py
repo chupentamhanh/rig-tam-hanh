@@ -2311,7 +2311,7 @@ def region_invariants(context, face):
             rows.append(('HỎNG', 'FS_Lid' + sfx,
                          "%d/%d vertex nằm gần một con mắt KHÁC -- nhóm mí đang "
                          "ôm nhiều hơn một nhãn cầu, khe mí sẽ rơi lọt giữa hai "
-                         "mắt. Bấm 'Tạo nhóm vùng FS_*' để tách"
+                         "mắt. Bấm 'Đánh dấu vùng mặt' để tách"
                          % (stray, len(reg))))
 
         u_reg = read_region(face, 'FS_LidUpper' + sfx)
@@ -4375,7 +4375,7 @@ class FACESHAPES_Settings(PropertyGroup):
 
 class FACESHAPES_OT_calibrate(Operator):
     bl_idname = "face_shapes.calibrate"
-    bl_label = "Nhận diện & hiệu chỉnh rig"
+    bl_label = "Đo khuôn mặt (tự động)"
     bl_description = ("Đo kích thước khuôn mặt và hiệu chỉnh mức bù khóe miệng, "
                       "trần hạ hàm, đường gặp mí -- bằng đo đạc trên mesh")
     bl_options = {'REGISTER', 'UNDO'}
@@ -4709,7 +4709,7 @@ def auto_cheeks(face, want=('L', 'R')):
 
 class FACESHAPES_OT_make_regions(Operator):
     bl_idname = "face_shapes.make_regions"
-    bl_label = "Tạo nhóm vùng FS_*"
+    bl_label = "Đánh dấu vùng mặt"
     bl_description = ("Tạo sẵn các nhóm FS_Lip / FS_Lid / FS_Brow / FS_Nose / "
                       "FS_Jaw / FS_Cheek. Nếu mesh đã skin thì tự đổ trọng số từ "
                       "vertex group sẵn có, còn không thì tạo nhóm rỗng để bạn tô. "
@@ -5536,7 +5536,7 @@ class FACESHAPES_OT_add_bones(Operator):
             self.report({'ERROR'}, "Cần cả mesh mặt lẫn rig làm nó biến dạng")
             return {'CANCELLED'}
         if regions is None:
-            self.report({'ERROR'}, "Thiếu nhóm vùng FS_* -- bấm 'Tạo nhóm vùng FS_*'")
+            self.report({'ERROR'}, "Thiếu nhóm vùng FS_* -- bấm 'Đánh dấu vùng mặt'")
             return {'CANCELLED'}
         if self.parent_name and self.parent_name not in _bone_names(arm):
             self.report({'ERROR'}, "Rig không có xương %r để nối vào"
@@ -6166,6 +6166,36 @@ class FACESHAPES_OT_build(Operator):
         name="Xoá cả shape key làm tay", default=False,
         description="Mặc định TẮT: shape key không phải do addon sinh ra được "
                     "giữ nguyên. Bật thì mesh bị dọn trắng trước khi dựng")
+    follow_skin: BoolProperty(
+        name="Lông mày / râu rời bám da", default=True,
+        description="Dựng xong thì lông mày, râu, mi rời tự bám theo mọi key mới "
+                    "của mặt (như nút 'Lông mày / râu rời bám da')")
+
+    def invoke(self, context, event):
+        _arm, face = find_rig_and_mesh(context)
+        key = face.data.shape_keys if face is not None else None
+        own = [kb for kb in key.key_blocks if is_own(key, kb)] if key else []
+        if not own:
+            return self.execute(context)
+        hand = len(key.key_blocks) - 1 - len(own)
+        msg = "%d shape key do addon dựng trên %s sẽ được dựng lại (chỉnh tay trên chúng sẽ mất)." % (
+            len(own), face.name)
+        if hand:
+            msg += " %d key bạn tự làm được giữ nguyên." % hand
+        return context.window_manager.invoke_confirm(
+            self, event, title="Dựng lại bộ shape key", message=msg, confirm_text="Dựng lại",
+            icon='WARNING')
+
+    def execute(self, context):
+        res = self._execute(context)
+        if 'FINISHED' in res and self.follow_skin:
+            from . import ux
+            _arm, face = find_rig_and_mesh(context)
+            if face is not None and face.data.shape_keys:
+                lines = ux.follow_all(context, face)
+                if lines:
+                    self.report({'INFO'}, " | ".join(lines))
+        return res
 
     def strip(self, objs):
         """Dọn chỗ cho bộ mới. Trả về False nếu phải dừng."""
@@ -6188,7 +6218,7 @@ class FACESHAPES_OT_build(Operator):
             self.report({'ERROR'}, "Không tìm thấy mesh mặt")
             return {'CANCELLED'}
         if regions is None:
-            self.report({'ERROR'}, "Thiếu nhóm vùng %s -- bấm 'Tạo nhóm vùng FS_*' "
+            self.report({'ERROR'}, "Thiếu nhóm vùng %s -- bấm 'Đánh dấu vùng mặt' "
                                    "rồi tô nếu cần" % ", ".join(REQUIRED))
             return {'CANCELLED'}
 
@@ -6285,7 +6315,7 @@ class FACESHAPES_OT_build(Operator):
                                   "đạt hết hợp đồng" % (len(made), face.name))
         return {'FINISHED'}
 
-    def execute(self, context):
+    def _execute(self, context):
         st = context.scene.face_shapes
         if st.mode == 'REGION':
             return self.build_region(context)
@@ -6303,7 +6333,7 @@ class FACESHAPES_OT_build(Operator):
             if arm is None or missing_bones(arm):
                 self.report({'ERROR'},
                             "Không có nhóm vùng FS_* mà rig cũng không đủ bone điều "
-                            "khiển. Bấm 'Tạo nhóm vùng FS_*' để dùng chế độ vùng")
+                            "khiển. Bấm 'Đánh dấu vùng mặt' để dùng chế độ vùng")
                 return {'CANCELLED'}
         return self.build_rig(context)
 
@@ -6702,7 +6732,7 @@ MỨC CƯỜNG ĐIỆU (slider ngay trên nút Dựng)
 
 HAI CÁCH DỰNG
   THEO VÙNG (chạy với mọi mesh, không cần rig)
-    Cần các nhóm vertex khoanh vùng. Bấm "Tạo nhóm vùng FS_*": nếu mesh đã skin
+    Cần các nhóm vertex khoanh vùng. Bấm "Đánh dấu vùng mặt": nếu mesh đã skin
     thì addon tự đổ trọng số từ vertex group sẵn có, không thì tạo nhóm rỗng để
     bạn tô bằng Weight Paint.
       FS_LipUpper, FS_LipLower              (bắt buộc)

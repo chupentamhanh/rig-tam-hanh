@@ -341,7 +341,7 @@ class SRP_OT_ref_from_rig(bpy.types.Operator):
     """Dựng lại bộ xương ref từ chính rig đang có — kể cả rig đã bind skin.
     Sửa bộ ref xong thì bấm 'Cập nhật rig từ ref' ở mục 4"""
     bl_idname = "srp.ref_from_rig"
-    bl_label = "Dựng lại bộ ref từ rig"
+    bl_label = "Chỉnh lại vị trí xương của rig"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod

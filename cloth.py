@@ -1598,25 +1598,19 @@ def draw_cloth(layout, context):
     row.operator("srp.cloth_find", icon='VIEWZOOM')
     row.operator("srp.cloth_add", text="Thêm đang chọn", icon='ADD')
     if len(settings.cloth_meshes):
-        box.prop(settings, "skin_follow")
-        r = box.row()
-        r.scale_y = 1.4
-        r.operator("srp.cloth_bind", icon='MOD_ARMATURE')
         draw_sync(box, context, body)
-    box.operator("srp.fill_weights", icon='MOD_VERTEX_WEIGHT')
 
 
 def draw_sync(layout, context, body):
-    """Nút "Cập nhật weight từ thân" + cảnh báo khi thân đã vẽ lại."""
+    """Nút "Cập nhật quần áo" + cảnh báo khi thân đã vẽ lại / còn món chưa bind."""
     col = layout.column(align=True)
     if sync_stale(body):
         row = col.row()
         row.alert = True
         row.label(text="%s đã sửa weight, quần áo chưa cập nhật" % body.name, icon='ERROR')
-    r = col.row(align=True)
-    r.scale_y = 1.3
-    r.operator("srp.sync_from_body", icon='UV_SYNC_SELECT')
-    r.operator("srp.sync_from_body", text="+ Tóc").hair = True
+    r = col.row()
+    r.scale_y = 1.4
+    r.operator("srp.cloth_update", icon='MOD_CLOTH')
 
 
 CLASSES = (SRP_ClothMesh, SRP_OT_cloth_find, SRP_OT_cloth_add, SRP_OT_cloth_remove,
