@@ -39,6 +39,8 @@ TESTS = [
      ["Tall", "1.55", "1.25", "0.85", "1.0", "1.1", "1.45", "{out}"], "CHECK", []),
     ("weights", "weights_tools.py", "adult_final.blend", ["{out}"], "CHECK", []),
     ("ux", "ux_tools.py", "adult_final.blend", [], "CHECK", []),
+    ("face_bendy", "face_bendy.py", "adult_final.blend", ["{out}"], "CHECK", []),
+    ("face_bendy_remove", "face_bendy_remove.py", "adult_final.blend", [], "CHECK", []),
     ("unity_export", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity"], "SMOKE", []),
     ("unity_import", "unity_import.py", None, ["{shared}/unity"], "SMOKE", []),
     ("unity_export_combined", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity_c", "combine"], "SMOKE", []),

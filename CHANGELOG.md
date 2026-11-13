@@ -7,6 +7,29 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.29.0 — 2026-11-13
+
+**Face rig bằng bendy bone** (`facebendy.py`, nút trong khu *Mặt*): điều khiển
+biểu cảm hoàn toàn bằng xương, không shape key, vẫn xuất được sang game engine.
+- Mày (3 control), mí trên / mí dưới (3 control, góc mí dùng chung), môi trên /
+  môi dưới (5 control, khoé dùng chung) thành chuỗi bendy bone 8 đoạn, handle
+  ABSOLUTE nối các đoạn liền nhau. Xương deform mặt gắn vào khớp nối
+  (`FSk_*`, Copy Transforms + Follow B-Bone) đặt đúng điểm đường cong lúc nghỉ.
+- Môi dưới theo Jaw, khoé miệng theo Jaw 50% (đo: hàm 15° -> khoé đi ~43% môi dưới).
+- Mí: xương mí treo dưới cần xoay từ tâm nhãn cầu (`FMch_LidAim_*`, Damped Track
+  vào đường cong) và cần đẩy ra (`FMch_LidPush_*`, driver theo góc quay, 0.2 bán
+  kính / radian). Đo trên Adult, nhắm mắt hết khe: kéo thẳng như các đường khác
+  thì da mí cắt qua nhãn cầu; chỉ xoay (không đẩy) còn 8 vertex lọt vào mắt
+  sâu > 1 mm; xoay + đẩy: 0–2. Đã thử và bỏ: Shrinkwrap lên mesh mắt (mesh mắt
+  nhiều lớp, bám nhầm lớp trong), Limit Distance (chỉ dời xương, da vẫn cắt).
+- Tư thế nghỉ lệch 0.0002 mm, weight không đổi vertex nào.
+- Xuất FBX (tắt *Chỉ xương Humanoid*): xương mặt là con của Head, mở lại FBX
+  thấy Lip_Upper_Mid đi 2.90 mm khi control kéo 3 mm; không có xương `FCtl_` /
+  `FBB_` / `FSk_` / `FMch_` trong file.
+- Gỡ: xương mặt về cha cũ, xoá control / đoạn / khớp nối / driver; khám rig 0
+  lỗi cả khi có và khi đã gỡ lớp bendy.
+- Test mới: `face_bendy` (12 mục, gồm nhắm mắt), `face_bendy_remove` (5 mục).
+
 ## 1.28.0 — 2026-11-12
 
 **Dễ dùng hơn: gom nút, hỏi lại trước khi ghi đè, thanh "Bước tiếp theo"**

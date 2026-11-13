@@ -21,7 +21,7 @@ from bpy.props import IntProperty, StringProperty
 # Thứ tự = luồng làm việc. Sửa để cuối: không phải một bước, là hộp đồ nghề.
 ZONES = (
     ('BUILD', "Dựng", 'ARMATURE_DATA', "Dựng rig từ bộ xương ref rồi bind skin"),
-    ('FACE', "Mặt", 'SHAPEKEY_DATA', "Shape key khuôn mặt, pose thành shape key, đối xứng L/R"),
+    ('FACE', "Mặt", 'SHAPEKEY_DATA', "Shape key khuôn mặt, face rig bằng bendy bone, pose thành shape key, đối xứng L/R"),
     ('ANIM', "Diễn", 'POSE_HLT', "Picker, FK/IK, công cụ animate, onion skin"),
     ('EXPORT', "Xuất", 'EXPORT', "Xuất nhân vật + animation sang Unity Humanoid"),
     ('FIX', "Sửa", 'TOOL_SETTINGS', "Quét lỗi rig, dựng lại driver, khám rig, đổi tên xương"),

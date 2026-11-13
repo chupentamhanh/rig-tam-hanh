@@ -12,7 +12,7 @@ co nut "?" tren dau, noi dung o `uikit.HELP`.
 
 import bpy
 
-from . import (cloth, face, fitref, generate, health, onion, picker, posekey, prefs, refrig,
+from . import (cloth, face, facebendy, fitref, generate, health, onion, picker, posekey, prefs, refrig,
                remap, rigdef, uikit, unityexport, ux, widgets)
 
 
@@ -198,6 +198,7 @@ class SRP_PT_face(_Base, bpy.types.Panel):
         uikit.help_button(row, self.help)
 
     def draw(self, context):
+        facebendy.draw(self.layout, context)
         face.draw_main(self.layout, context)
 
 

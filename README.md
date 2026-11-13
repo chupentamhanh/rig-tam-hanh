@@ -21,6 +21,8 @@ Chạy hoàn toàn offline, giao diện tiếng Việt.
   **cập nhật weight từ thân** sau mỗi lần sửa thân, có cảnh báo khi quần áo chưa cập nhật.
 - **Shape key khuôn mặt**: dựng bộ shape key (âm vị, hàm, miệng, lưỡi, mắt, mày) từ xương
   mặt, biến pose thành shape key, đối xứng L↔R.
+- **Face rig bằng bendy bone**: điều khiển mày, mí, môi bằng đường cong bendy bone kéo các
+  xương mặt bên dưới — không cần shape key, xuất sang game engine như animation xương thường.
 - **Diễn hoạt**: picker, chuyển và snap FK↔IK, bake theo đoạn, onion skin.
 - **Xuất Unity Humanoid**: xuất FBX nhân vật + animation kèm bảng ánh xạ xương; script
   import cho Unity tự dựng Avatar, không cần map tay.
@@ -159,7 +161,29 @@ khi bạn muốn addon làm lại cả chỗ đó. Bind mesh lại từ đầu t
 Bind mesh thân → Sửa weight… / Tự làm mượt weight các khớp → vẽ tay chỗ còn chưa ưng →
 Cập nhật quần áo.
 
-### 3. Mặt — shape key khuôn mặt
+### 3. Mặt — shape key hoặc bendy bone
+
+Có hai cách điều khiển biểu cảm, dùng một trong hai (hoặc cả hai):
+
+**Face rig bằng bendy bone** (không đụng tới shape key) — hộp đầu tiên trong khu *Mặt*:
+
+- **Dựng**: mỗi đường mày, mí trên, mí dưới, môi trên, môi dưới thành một chuỗi bendy bone
+  nối giữa vài control hình cầu (`FCtl_*`, collection *Face Controls*). Kéo control là đường
+  cong uốn theo, các xương mặt đang skin (Eyebrow, Eyelid, Lip…) bám vào đúng một điểm trên
+  đường cong. Góc mí và khoé miệng là control dùng chung của hai đường; môi dưới đi theo hàm,
+  khoé miệng theo hàm một nửa.
+- **Weight và tư thế nghỉ không đổi**: dựng xong mặt không xê dịch (lệch < 0.001 mm), không
+  sửa một vertex weight nào.
+- **Mí ôm nhãn cầu**: xương mí quay quanh tâm nhãn cầu thay vì trượt thẳng, và được đẩy ra
+  một chút theo góc nhắm, nên nhắm mắt không bị nhãn cầu lòi qua da. Nhắm kín: kéo control
+  mí trên xuống tới mí dưới, mí dưới lên khoảng 1/4.
+- **Xuất game**: tắt *Chỉ xương Humanoid* khi xuất. Addon lấy mẫu từng frame các xương mặt
+  thành animation xương thường (con của Head); control, bendy bone và xương cơ chế (`FBB_*`,
+  `FSk_*`, `FMch_*`) không vào file FBX.
+- **Gỡ**: trả xương mặt về cha cũ, xoá hết lớp điều khiển.
+
+**Shape key khuôn mặt**:
+
 
 <img src="docs/images/face.png" width="420" align="right">
 
