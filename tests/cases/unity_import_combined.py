@@ -17,7 +17,7 @@ err = max((arm.matrix_world @ B[n].head_local - T(p)).length for n, p in ref["re
 print("rest pose error %.2e" % err, "| bones", len(B), "| shape keys", len(body.data.shape_keys.key_blocks))
 sc = bpy.context.scene
 for c in mp["clips"]:
-    act = next(a for a in bpy.data.actions if a.name == "Kid|" + c["name"])
+    act = next(a for a in bpy.data.actions if a.name == "Kid_Armature|" + c["name"])
     arm.animation_data.action = act
     if arm.animation_data.action_slot is None and len(act.slots):
         arm.animation_data.action_slot = act.slots[0]

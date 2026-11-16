@@ -27,8 +27,9 @@ import os
 import re
 
 import bpy
-from bpy.props import BoolProperty, EnumProperty, PointerProperty, StringProperty
-from bpy.types import Operator, PropertyGroup
+from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, IntProperty,
+                       PointerProperty, StringProperty)
+from bpy.types import Operator, PropertyGroup, UIList
 from mathutils import Matrix, Vector
 
 from . import compat, prefs, rigdef
@@ -279,6 +280,40 @@ def picked_actions(arm):
     return [a for a in rig_actions(arm) if getattr(a, "srp_unity_export", True)]
 
 
+SCOPES = (('RIG', "Mọi mesh của rig", "Mọi mesh skin / gắn vào rig (trừ mesh tắt render)"),
+          ('SELECTED', "Mesh đang chọn", "Chỉ những mesh của rig đang được chọn trong viewport"),
+          ('VISIBLE', "Mesh đang hiện", "Chỉ những mesh của rig đang hiện trong viewport"),
+          ('COLLECTION', "Mesh trong collection", "Chỉ những mesh của rig nằm trong một collection"))
+
+
+def scoped_meshes(context, arm, scope='RIG', coll=None):
+    """rig_meshes lọc theo phạm vi xuất. Trả về (skinned, attached)."""
+    skinned, attached = rig_meshes(arm)
+    if scope == 'SELECTED':
+        keep = lambda o: o.select_get()
+    elif scope == 'VISIBLE':
+        keep = lambda o: o.visible_get()
+    elif scope == 'COLLECTION':
+        objs = set(coll.all_objects) if coll is not None else set()
+        keep = lambda o: o in objs
+    else:
+        return skinned, attached
+    return [o for o in skinned if keep(o)], [o for o in attached if keep(o)]
+
+
+def action_sets(arm):
+    """[(bộ, [action])] -- bộ action được tích xuất, bỏ ô trống / action đã xoá."""
+    out = []
+    for st in getattr(arm, "srp_action_sets", ()):
+        acts = []
+        for r in st.actions:
+            if r.action is not None and r.action not in acts:
+                acts.append(r.action)
+        if st.use and acts:
+            out.append((st, acts))
+    return out
+
+
 def driven_into(meshes):
     """{mesh có key chạy bằng driver: mesh mà driver trỏ tới}."""
     keys = {o.data.shape_keys: o for o in meshes if o.data.shape_keys}
@@ -483,9 +518,17 @@ def _with(context, obj, sel=None):
 FACE_Z = Matrix.Rotation(3.141592653589793, 4, 'Z')
 
 
+def skeleton_name(name):
+    """Tên node armature trong FBX. KHÔNG được trùng tên file: Unity đặt node
+    gốc của mô hình theo tên file, rồi dựng Avatar bằng cách khớp transform theo
+    TÊN -- trùng thì nó lấy nhầm node gốc thay cho armature, tư thế tham chiếu
+    của Avatar bị xoay (đo: chân nằm ngang, T-pose hỏng)."""
+    return safe(name) + "_Armature"
+
+
 def build_skeleton(context, arm, hmap, name, coll, turn, only_human=False):
-    data = bpy.data.armatures.new(name)
-    obj = bpy.data.objects.new(name, data)
+    data = bpy.data.armatures.new(skeleton_name(name))
+    obj = bpy.data.objects.new(skeleton_name(name), data)
     coll.objects.link(obj)
     obj.matrix_world = turn @ arm.matrix_world
     bones = game_bones(arm, hmap, only_human)
@@ -543,13 +586,13 @@ def limit_weights(obj, deform):
             idx[gi].add([v.index], w / tot, 'REPLACE')
 
 
-def prep_meshes(context, arm, game, coll, rename, made, turn, merge=None):
+def prep_meshes(context, arm, game, coll, rename, made, turn, merge=None, src=None):
     """Bản sao mesh sẵn để xuất. Trả về [object]; data tạo ra ghi vào `made`.
 
     `rename`: {object gốc: tên gốc} -- bản gốc đang mang tên tạm để bản sao
     lấy được đúng tên.
     """
-    skinned, attached = rig_meshes(arm)
+    skinned, attached = src if src is not None else rig_meshes(arm)
     deform = {b.name for b in game.data.bones if b.use_deform}
     copies = {}
     for o in skinned + attached:
@@ -579,8 +622,10 @@ def prep_meshes(context, arm, game, coll, rename, made, turn, merge=None):
 
     # gộp mesh có key chạy bằng driver vào mesh nó bám
     gone = set()
-    for o, src in driven_into(skinned).items():
-        t, s = copies[src], copies[o]
+    for o, host in driven_into(skinned).items():
+        if host not in copies:
+            continue            # mesh nó bám không nằm trong phạm vi xuất
+        t, s = copies[host], copies[o]
         with _with(context, t, [t, s]):
             bpy.ops.object.join()
         gone.add(o)
@@ -746,6 +791,10 @@ def _strip(id_, name, start, action, slot, first, last):
 
 def export_combined(context, arm, game, meshes, acts, path, made):
     """Một FBX: mô hình + mỗi action một take. Trả về danh sách clip."""
+    for id_ in [game] + [m.data.shape_keys for m in meshes if m.data.shape_keys]:
+        if id_.animation_data:
+            for tr in list(id_.animation_data.nla_tracks):
+                id_.animation_data.nla_tracks.remove(tr)
     follow(game, True)
     clips, t = [], 1
     for a in acts:
@@ -857,25 +906,66 @@ def _cleanup(coll, made_data):
             pass
 
 
+def clip_plan(acts, which, combine):
+    """[(tên file clip hoặc None = file nhân vật, [action])] theo cách xuất."""
+    if which == 'SETS':
+        return [(safe(st.name), a) for st, a in acts]
+    if combine and acts:
+        return [(None, acts)]
+    return [(safe(a.name), [a]) for a in acts]
+
+
+def clip_info(plan, which, combine):
+    """Bảng clip cho json -- tính TRƯỚC khi ghi FBX để ghi được json trước."""
+    clips = []
+    for file, acts in plan:
+        multi = which == 'SETS' or (combine and file is None)
+        t = 1
+        for a in acts:
+            s, e = (int(round(x)) for x in a.frame_range)
+            e = max(e, s + 1)
+            c = {'name': safe(a.name), 'loop': bool(getattr(a, 'use_cyclic', False)),
+                 'first': s, 'last': e, 'face': face_action(a)[0] is not None}
+            if multi:
+                c['start'] = t
+                t += (e - s) + CLIP_GAP
+            if which == 'SETS':
+                c['file'] = file
+            clips.append(c)
+    return clips
+
+
 def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
-           only_human=True, tpose=True):
+           only_human=True, tpose=True, scope='RIG', scope_coll=None):
     """Xuất. Trả về (danh sách file, dòng log).
 
     combine=True: mọi clip nằm trong chính `<tên>.fbx` (mỗi action một take),
     không ra file `<tên>@<action>.fbx` nào.
+    which='SETS': mỗi bộ action một file `<tên>@<bộ>.fbx`, mỗi action một take.
+    scope: mesh nào được xuất (SCOPES).
     """
     turn = FACE_Z if face_z else Matrix()
     errors, warns, notes, hmap = check(arm)
     if errors:
         raise ValueError("; ".join(errors))
+    skinned, attached = scoped_meshes(context, arm, scope, scope_coll)
+    if not skinned and not attached:
+        raise ValueError("Không có mesh nào của %s trong phạm vi xuất (%s)"
+                         % (arm.name, dict((k, n) for k, n, _d in SCOPES)[scope]))
+    if which == 'SETS':
+        acts = action_sets(arm)
+        if not acts:
+            raise ValueError("Chưa có bộ action nào được tích (hoặc bộ nào cũng trống)")
+        combine = False
+    else:
+        acts = picked_actions(arm)
+        if which == 'NONE':
+            acts = []
+        elif which == 'ACTIVE':
+            cur = arm.animation_data.action if arm.animation_data else None
+            acts = [cur] if cur is not None else []
     os.makedirs(folder, exist_ok=True)
-    skinned, attached = rig_meshes(arm)
-    acts = picked_actions(arm)
-    if which == 'NONE':
-        acts = []
-    elif which == 'ACTIVE':
-        cur = arm.animation_data.action if arm.animation_data else None
-        acts = [cur] if cur is not None else []
+    plan = clip_plan(acts, which, combine)
 
     state = _State(context, arm, skinned + attached)
     if context.object is not None and context.object.mode != 'OBJECT':
@@ -896,7 +986,8 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
         if only_human:
             torso = {hmap[h] for h in TORSO if h in hmap}
             merge = merge_map(arm, {b.name for b in game.data.bones}, torso)
-        meshes = prep_meshes(context, arm, game, coll, rename, made, turn, merge)
+        meshes = prep_meshes(context, arm, game, coll, rename, made, turn, merge,
+                             (skinned, attached))
         objs = [game] + meshes
         anim = arm.animation_data or arm.animation_data_create()
         for t in anim.nla_tracks:
@@ -904,9 +995,25 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
 
         base = os.path.join(folder, safe(name) + ".fbx")
         sc = context.scene
-        clips = []
-        if combine and acts:
-            clips = export_combined(context, arm, game, meshes, acts, base, made)
+        combined = bool(combine and plan and plan[0][0] is None)
+        clips = clip_info(plan, which, combine)
+        # json ghi TRƯỚC FBX: Unity đang mở mà nạp FBX lúc json chưa có thì vẫn
+        # nhận ra (script Unity cũng tự import lại FBX khi json tới sau)
+        mapping = {
+            'version': 1, 'character': safe(name), 'keep_extra': not only_human,
+            'keep_rest_pose': not tpose,
+            'combined': combined,
+            'fps': sc.render.fps / sc.render.fps_base,
+            'human': [{'human': h, 'bone': hmap[h]} for h in HUMAN_ORDER if h in hmap],
+            'clips': clips,
+            'sets': [f for f, _a in plan] if which == 'SETS' else [],
+        }
+        js = os.path.join(folder, safe(name) + ".humanoid.json")
+        with open(js, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=1)
+
+        if combined:
+            export_combined(context, arm, game, meshes, plan[0][1], base, made)
             files.append(base)
         else:
             # mô hình: rest pose, không animation
@@ -915,37 +1022,29 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
             write_fbx(context, base, objs, anim=False)
             files.append(base)
             follow(game, True)
-        for a in ([] if combine else acts):
+        for file, group in ([] if combined else plan):
+            p = os.path.join(folder, "%s@%s.fbx" % (safe(name), file))
+            if which == 'SETS':
+                export_combined(context, arm, game, meshes, group, p, made)
+                files.append(p)
+                continue
+            a = group[0]
             compat.assign_action(arm, a)
             fa, fs = face_action(a)
             for m in meshes:
                 set_key_action(m, fa, fs)
-            s, e = (int(round(x)) for x in a.frame_range)
-            sc.frame_start, sc.frame_end = s, max(e, s + 1)
-            sc.frame_set(s)
-            p = os.path.join(folder, "%s@%s.fbx" % (safe(name), safe(a.name)))
+            s0, e0 = (int(round(x)) for x in a.frame_range)
+            sc.frame_start, sc.frame_end = s0, max(e0, s0 + 1)
+            sc.frame_set(s0)
             write_fbx(context, p, objs, anim=True)
             files.append(p)
-            clips.append({'name': safe(a.name), 'loop': bool(getattr(a, 'use_cyclic', False)),
-                          'first': s, 'last': e, 'face': fa is not None})
         sc.frame_set(state.frame[2])
-
-        mapping = {
-            'version': 1, 'character': safe(name), 'keep_extra': not only_human,
-            'keep_rest_pose': not tpose,
-            'combined': bool(combine and clips),
-            'fps': sc.render.fps / sc.render.fps_base,
-            'human': [{'human': h, 'bone': hmap[h]} for h in HUMAN_ORDER if h in hmap],
-            'clips': clips,
-        }
-        js = os.path.join(folder, safe(name) + ".humanoid.json")
-        with open(js, 'w', encoding='utf-8') as f:
-            json.dump(mapping, f, ensure_ascii=False, indent=1)
         files.append(js)
         ed = unity_editor_dir(folder)
         files.append(write_unity_script(ed or folder))
-        lines.append("%d bone trong khung game, %d bone Humanoid, %d mesh, %d clip%s"
+        lines.append("%d bone trong khung game, %d bone Humanoid, %d mesh, %d clip%s%s"
                      % (len(game.data.bones), len(hmap), len(meshes), len(clips),
+                        " trong %d bộ" % len(plan) if which == 'SETS' else "",
                         " | dồn trọng số %d bone bỏ đi" % len(merge) if merge else ""))
     finally:
         _cleanup(coll, made)
@@ -976,6 +1075,20 @@ def default_name(arm):
     return re.sub(r'\.\d{3}$', '', arm.name) if arm else "Character"
 
 
+class SRP_ActionRef(PropertyGroup):
+    action: PointerProperty(type=bpy.types.Action, name="Action")
+
+
+class SRP_ActionSet(PropertyGroup):
+    """Một bộ action (action collection): xuất thành một file <tên>@<bộ>.fbx,
+    mỗi action một take. Lưu trên chính rig."""
+    name: StringProperty(name="Tên bộ", default="Bo")
+    use: BoolProperty(name="Xuất", default=True,
+                      description="Tích: bộ này được xuất khi chọn 'Theo bộ action'")
+    actions: CollectionProperty(type=SRP_ActionRef)
+    index: IntProperty(default=0)
+
+
 class SRP_UnitySettings(PropertyGroup):
     rig: PointerProperty(type=bpy.types.Object, name="Rig",
                          poll=lambda self, o: o.type == 'ARMATURE')
@@ -991,8 +1104,15 @@ class SRP_UnitySettings(PropertyGroup):
                 "Chỉ xuất các clip được tích trong danh sách bên dưới -- mỗi clip ra "
                 "một file <tên>@<clip>.fbx (hoặc một take nếu gộp)"),
                ('ACTIVE', "Chỉ action đang gán", ""),
+               ('SETS', "Theo bộ action",
+                "Mỗi bộ action được tích ra một file <tên>@<bộ>.fbx, trong đó mỗi "
+                "action một take (giống action collection)"),
                ('NONE', "Không xuất animation", "Chỉ mô hình + Avatar")),
         default='ALL')
+    scope: EnumProperty(name="Mesh xuất", items=SCOPES, default='RIG',
+                        description="Xuất những mesh nào của rig. Khung xương luôn đủ")
+    scope_coll: PointerProperty(type=bpy.types.Collection, name="Collection",
+                                description="Chỉ xuất mesh của rig nằm trong collection này")
     only_human: BoolProperty(
         name="Chỉ xương Humanoid", default=True,
         description="Bật: FBX chỉ có các xương Unity Humanoid cần (Hips làm gốc). "
@@ -1086,8 +1206,8 @@ class SRP_OT_unity_export(Operator):
         name = st.name.strip() or default_name(arm)
         try:
             files, lines = export(context, arm, folder, name, st.which, st.face_z,
-                                  st.combine and st.which != 'NONE', st.only_human,
-                                  st.tpose)
+                                  st.combine and st.which not in ('NONE', 'SETS'),
+                                  st.only_human, st.tpose, st.scope, st.scope_coll)
         except ValueError as e:
             self.report({'ERROR'}, "Không xuất được: %s" % e)
             return {'CANCELLED'}
@@ -1116,6 +1236,134 @@ class SRP_OT_unity_clips(Operator):
         for a in rig_actions(arm):
             a.srp_unity_export = self.value
         return {'FINISHED'}
+
+
+class SRP_UL_action_sets(UIList):
+    bl_idname = "SRP_UL_action_sets"
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
+        row = layout.row(align=True)
+        row.prop(item, "use", text="")
+        row.prop(item, "name", text="", emboss=False)
+        n = sum(1 for r in item.actions if r.action is not None)
+        row.label(text="%d clip" % n)
+
+
+class SRP_UL_set_actions(UIList):
+    bl_idname = "SRP_UL_set_actions"
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index=0):
+        if item.action is None:
+            layout.label(text="(action đã xoá)", icon='ERROR')
+            return
+        row = layout.row(align=True)
+        row.label(text=item.action.name, icon='ACTION')
+        f0, f1 = (int(round(x)) for x in item.action.frame_range)
+        sub = row.row()
+        sub.alignment = 'RIGHT'
+        sub.label(text="%d–%d" % (f0, f1))
+
+
+def _set_items(self, context):
+    arm = _rig(context)
+    return [(a.name, a.name, "") for a in (rig_actions(arm) if arm else [])] or [("", "(rig chưa có action)", "")]
+
+
+class SRP_OT_action_set(Operator):
+    """Thêm / xoá bộ action, thêm / bỏ action trong bộ"""
+    bl_idname = "srp.action_set"
+    bl_label = "Bộ action"
+    bl_options = {'REGISTER', 'UNDO'}
+    bl_property = "pick"
+
+    op: EnumProperty(items=(('ADD_SET', "Thêm bộ", ""), ('DEL_SET', "Xoá bộ", ""),
+                            ('ADD', "Thêm action", ""), ('ADD_CHECKED', "Thêm các clip đang tích", ""),
+                            ('DEL', "Bỏ action", ""), ('UP', "Lên", ""), ('DOWN', "Xuống", "")))
+    pick: EnumProperty(items=_set_items, name="Action")
+
+    @classmethod
+    def description(cls, context, props):
+        return {'ADD_SET': "Thêm một bộ action mới",
+                'DEL_SET': "Xoá bộ đang chọn (action không bị xoá)",
+                'ADD': "Thêm một action của rig vào bộ đang chọn",
+                'ADD_CHECKED': "Thêm mọi clip đang tích trong danh sách clip vào bộ đang chọn",
+                'DEL': "Bỏ action đang chọn ra khỏi bộ (action không bị xoá)",
+                'UP': "Đưa action lên trên", 'DOWN': "Đưa action xuống dưới"}[props.op]
+
+    def invoke(self, context, event):
+        if self.op == 'ADD':
+            context.window_manager.invoke_search_popup(self)
+            return {'RUNNING_MODAL'}
+        return self.execute(context)
+
+    def execute(self, context):
+        arm = _rig(context)
+        if arm is None:
+            self.report({'ERROR'}, "Chưa chọn rig")
+            return {'CANCELLED'}
+        sets = arm.srp_action_sets
+        if self.op == 'ADD_SET':
+            st = sets.add()
+            st.name = "Bo_%d" % len(sets)
+            arm.srp_action_sets_index = len(sets) - 1
+            return {'FINISHED'}
+        if not len(sets):
+            self.report({'ERROR'}, "Chưa có bộ action nào")
+            return {'CANCELLED'}
+        i = min(arm.srp_action_sets_index, len(sets) - 1)
+        st = sets[i]
+        if self.op == 'DEL_SET':
+            sets.remove(i)
+            arm.srp_action_sets_index = max(0, i - 1)
+            return {'FINISHED'}
+        have = {r.action for r in st.actions}
+        if self.op in ('ADD', 'ADD_CHECKED'):
+            new = ([bpy.data.actions.get(self.pick)] if self.op == 'ADD' else picked_actions(arm))
+            n = 0
+            for a in new:
+                if a is not None and a not in have:
+                    st.actions.add().action = a
+                    have.add(a)
+                    n += 1
+            st.index = len(st.actions) - 1
+            self.report({'INFO'}, "Thêm %d action vào %s" % (n, st.name))
+            return {'FINISHED'}
+        j = st.index
+        if not (0 <= j < len(st.actions)):
+            return {'CANCELLED'}
+        if self.op == 'DEL':
+            st.actions.remove(j)
+            st.index = max(0, j - 1)
+        elif self.op == 'UP' and j > 0:
+            st.actions.move(j, j - 1)
+            st.index = j - 1
+        elif self.op == 'DOWN' and j < len(st.actions) - 1:
+            st.actions.move(j, j + 1)
+            st.index = j + 1
+        return {'FINISHED'}
+
+
+def draw_sets(L, arm):
+    box = L.box()
+    box.label(text="Bộ action của %s -- mỗi bộ một file <tên>@<bộ>.fbx" % arm.name, icon='NLA')
+    row = box.row()
+    row.template_list("SRP_UL_action_sets", "", arm, "srp_action_sets", arm, "srp_action_sets_index", rows=3)
+    col = row.column(align=True)
+    col.operator("srp.action_set", text="", icon='ADD').op = 'ADD_SET'
+    col.operator("srp.action_set", text="", icon='REMOVE').op = 'DEL_SET'
+    sets = arm.srp_action_sets
+    if not len(sets):
+        return
+    st = sets[min(arm.srp_action_sets_index, len(sets) - 1)]
+    row = box.row()
+    row.template_list("SRP_UL_set_actions", "", st, "actions", st, "index", rows=4)
+    col = row.column(align=True)
+    col.operator("srp.action_set", text="", icon='ADD').op = 'ADD'
+    col.operator("srp.action_set", text="", icon='REMOVE').op = 'DEL'
+    col.separator()
+    col.operator("srp.action_set", text="", icon='TRIA_UP').op = 'UP'
+    col.operator("srp.action_set", text="", icon='TRIA_DOWN').op = 'DOWN'
+    box.operator("srp.action_set", text="Thêm các clip đang tích", icon='CHECKBOX_HLT').op = 'ADD_CHECKED'
 
 
 def draw_clips(L, arm):
@@ -1157,12 +1405,24 @@ def draw_unity(L, context):
         note = L.column(align=True)
         note.scale_y = 0.8
         note.label(text="Để trống → tên %r" % default_name(arm), icon='DOT')
+    L.prop(st, "scope")
+    if st.scope == 'COLLECTION':
+        L.prop(st, "scope_coll")
+    if arm is not None:
+        sk, at = scoped_meshes(context, arm, st.scope, st.scope_coll)
+        note = L.column(align=True)
+        note.scale_y = 0.8
+        names = [o.name for o in sk + at]
+        note.label(text="%d mesh: %s" % (len(names), ", ".join(names[:4]) + (" …" if len(names) > 4 else "")),
+                   icon='DOT' if names else 'ERROR')
     L.prop(st, "only_human")
     L.prop(st, "which", text="")
     if st.which == 'ALL' and arm is not None:
         draw_clips(L, arm)
+    if st.which == 'SETS' and arm is not None:
+        draw_sets(L, arm)
     row = L.row()
-    row.enabled = st.which != 'NONE'
+    row.enabled = st.which not in ('NONE', 'SETS')
     row.prop(st, "combine")
     L.prop(st, "face_z")
     L.prop(st, "tpose")
@@ -1175,12 +1435,15 @@ def draw_unity(L, context):
     r.operator("srp.unity_export", icon='EXPORT')
 
 
-CLASSES = (SRP_UnitySettings, SRP_OT_unity_check, SRP_OT_unity_map_edit,
-           SRP_OT_unity_export, SRP_OT_unity_clips)
+CLASSES = (SRP_ActionRef, SRP_ActionSet, SRP_UnitySettings, SRP_OT_unity_check,
+           SRP_OT_unity_map_edit, SRP_OT_unity_export, SRP_OT_unity_clips,
+           SRP_UL_action_sets, SRP_UL_set_actions, SRP_OT_action_set)
 
 
 def register_extra():
     bpy.types.Scene.srp_unity = PointerProperty(type=SRP_UnitySettings)
+    bpy.types.Object.srp_action_sets = CollectionProperty(type=SRP_ActionSet)
+    bpy.types.Object.srp_action_sets_index = IntProperty(default=0)
     # Lưu trên chính action: mở lại file vẫn nhớ clip nào bỏ ra
     bpy.types.Action.srp_unity_export = BoolProperty(
         name="Xuất sang Unity", default=True,
@@ -1188,7 +1451,8 @@ def register_extra():
 
 
 def unregister_extra():
-    for owner, attr in ((bpy.types.Scene, "srp_unity"), (bpy.types.Action, "srp_unity_export")):
+    for owner, attr in ((bpy.types.Scene, "srp_unity"), (bpy.types.Action, "srp_unity_export"),
+                        (bpy.types.Object, "srp_action_sets"), (bpy.types.Object, "srp_action_sets_index")):
         try:
             delattr(owner, attr)
         except AttributeError:
@@ -1199,18 +1463,26 @@ def unregister_extra():
 
 UNITY_CS = r'''// Sinh bởi Rig Tẩm Hành (Blender). Đặt trong một thư mục Editor của project.
 //
-// Mỗi file FBX có file <tên>.humanoid.json nằm cạnh sẽ được import thành
-// Humanoid với đúng bảng ánh xạ bone trong json -- không dùng auto-map.
-//   <tên>.fbx           -> mô hình, tự dựng Avatar
-//   <tên>@<clip>.fbx    -> animation, dùng lại Avatar của <tên>.fbx
-// Lần import đầu đọc cây transform, xong đặt lại importer rồi tự import lại
-// một lần; lần sau chỉ làm lại khi json đổi.
+// Mỗi file FBX có file <tên>.humanoid.json nằm cạnh được import thành Humanoid
+// với đúng bảng ánh xạ bone trong json -- không dùng auto-map.
+//   <tên>.fbx          -> mô hình, tự dựng Avatar
+//   <tên>@<clip>.fbx   -> một animation, dùng lại Avatar của <tên>.fbx
+//   <tên>@<bộ>.fbx     -> một bộ action: mỗi action một take
+//
+// Avatar dựng SAU khi Unity import xong cả đợt (OnPostprocessAllAssets), từ
+// chính mô hình vừa import, rồi import lại FBX đó một lần. Nhờ vậy:
+// - json tới sau FBX (Blender đang ghi dở, chép từng file) vẫn được xử lý:
+//   json tới là FBX cùng nhóm được import lại;
+// - file animation đợi mô hình dựng xong Avatar rồi mới chép Avatar đó, không
+//   tự dựng Avatar từ frame đầu của clip;
+// - không phụ thuộc thứ tự import.
+// Avatar không hợp lệ thì Console báo lỗi. Làm lại tay: chọn FBX, menu
+// Assets > Rig Tẩm Hành > Dựng lại Avatar Humanoid.
 //
 // Avatar dựng từ T-POSE (như nút Enforce T-Pose của Unity): tay ngang, cẳng
-// tay, bàn tay và bốn ngón thẳng theo tay, chân thẳng đứng. Tư thế nghỉ trong
-// Blender thường hơi chữ A, gối hơi gập -- dựng Avatar thẳng từ đó thì mọi
-// animation retarget sang đều lệch một góc cố định. Mô hình không bị đổi
-// dáng: chỉ tư thế tham chiếu của Avatar. Json có "keep_rest_pose": true thì bỏ qua.
+// tay, bàn tay và bốn ngón thẳng theo tay, chân thẳng đứng. Mô hình không bị
+// đổi dáng: chỉ tư thế tham chiếu của Avatar. Json có "keep_rest_pose": true
+// thì bỏ qua.
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1219,25 +1491,72 @@ using UnityEngine;
 
 public class RigTamHanhHumanoidImporter : AssetPostprocessor
 {
-    // v2: Avatar dựng từ T-pose -- file import bằng v1 tự dựng lại một lần.
-    const string Marker = "RigTamHanhHumanoid:v2:";
+    // v3: dựng Avatar sau khi import xong cả đợt -- file import bằng bản cũ tự dựng lại.
+    const string Marker = "RigTamHanhHumanoid:v3:";
+    public override uint GetVersion() { return 3; }
 
     [System.Serializable] public class Pair { public string human; public string bone; }
-    [System.Serializable] public class Clip { public string name; public bool loop; public int first; public int last; public bool face; public int start; }
+    [System.Serializable] public class Clip { public string name; public bool loop; public int first; public int last; public bool face; public int start; public string file; }
     [System.Serializable] public class Map
     {
         public int version; public string character; public bool keep_extra; public bool combined; public float fps;
         public bool keep_rest_pose;
-        public Pair[] human; public Clip[] clips;
+        public Pair[] human; public Clip[] clips; public string[] sets;
+    }
+
+    // ------------------------------------------------------------ tiện ích
+
+    static bool IsFbx(string p) { return p != null && p.ToLower().EndsWith(".fbx"); }
+
+    static string JsonFor(string assetPath, out string baseFbx, out string clip)
+    {
+        string dir = Path.GetDirectoryName(assetPath).Replace('\\', '/');
+        string file = Path.GetFileNameWithoutExtension(assetPath);
+        string ch = file;
+        clip = null;
+        int at = file.IndexOf('@');
+        if (at > 0) { ch = file.Substring(0, at); clip = file.Substring(at + 1); }
+        baseFbx = dir + "/" + ch + ".fbx";
+        return dir + "/" + ch + ".humanoid.json";
+    }
+
+    static Map Load(string path)
+    {
+        try { return File.Exists(path) ? JsonUtility.FromJson<Map>(File.ReadAllText(path)) : null; }
+        catch (System.Exception e) { Debug.LogError("[RigTamHanh] Không đọc được " + path + ": " + e.Message); return null; }
+    }
+
+    static string Stamp(string json)
+    {
+        return Marker + File.GetLastWriteTimeUtc(json).Ticks;
     }
 
     // Script import Humanoid khác (bản cũ còn sót) cùng xử lý FBX thì hai bên
-    // đóng dấu khác nhau và import lại nhau vô tận. Có thì dừng, báo xoá.
+    // ghi đè Avatar của nhau: FBX ra Generic hoặc mất T-pose. Có thì dừng, hỏi xoá.
     static string OtherImporter()
     {
         var other = TypeCache.GetTypesDerivedFrom<AssetPostprocessor>()
             .FirstOrDefault(t => t != typeof(RigTamHanhHumanoidImporter) && t.Name.EndsWith("HumanoidImporter"));
         return other == null ? null : other.Name;
+    }
+
+    static void WarnOther(string other, string assetPath)
+    {
+        string path = AssetDatabase.FindAssets(other + " t:MonoScript").Select(AssetDatabase.GUIDToAssetPath)
+            .FirstOrDefault(p => Path.GetFileNameWithoutExtension(p) == other);
+        Debug.LogError("[RigTamHanh] Project còn script " + other + (path != null ? " (" + path + ")" : "")
+            + " cũng dựng Avatar Humanoid -- " + assetPath + " chưa được xử lý. Xoá script đó rồi chọn FBX, "
+            + "Assets > Rig Tẩm Hành > Dựng lại Avatar Humanoid.");
+        if (path == null || Application.isBatchMode || SessionState.GetBool("RigTamHanh.AskedOther", false)) return;
+        SessionState.SetBool("RigTamHanh.AskedOther", true);
+        EditorApplication.delayCall += () =>
+        {
+            if (EditorUtility.DisplayDialog("Rig Tẩm Hành",
+                    "Project còn script import Humanoid khác:\n" + path +
+                    "\n\nHai script cùng dựng Avatar sẽ ghi đè nhau (FBX ra Generic, T-pose sai). Xoá script này?",
+                    "Xoá", "Để nguyên"))
+                AssetDatabase.DeleteAsset(path);
+        };
     }
 
     static void Align(Transform bone, Transform child, Vector3 dir)
@@ -1273,31 +1592,118 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
         }
     }
 
-    static string JsonFor(string assetPath, out string baseFbx, out string clip)
+    // HumanDescription từ chính mô hình đã import (bản sao tạm, không đụng asset).
+    static bool Describe(string fbx, Map map, out HumanDescription desc)
     {
-        string dir = Path.GetDirectoryName(assetPath).Replace('\\', '/');
-        string file = Path.GetFileNameWithoutExtension(assetPath);
-        string ch = file;
-        clip = null;
-        int at = file.IndexOf('@');
-        if (at > 0) { ch = file.Substring(0, at); clip = file.Substring(at + 1); }
-        baseFbx = dir + "/" + ch + ".fbx";
-        return dir + "/" + ch + ".humanoid.json";
+        desc = new HumanDescription();
+        var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbx);
+        if (model == null) { Debug.LogError("[RigTamHanh] " + fbx + ": chưa nạp được mô hình"); return false; }
+        var go = Object.Instantiate(model);
+        go.name = model.name;
+        go.hideFlags = HideFlags.HideAndDontSave;
+        try
+        {
+            var all = go.GetComponentsInChildren<Transform>(true);
+            // trùng tên (mesh tên giống bone): ưu tiên transform không có Renderer
+            var byName = new Dictionary<string, Transform>();
+            foreach (var t in all)
+                if (!byName.TryGetValue(t.name, out var old) || old.GetComponent<Renderer>() != null)
+                    byName[t.name] = t;
+            var dup = all.Where(t => t.GetComponent<Renderer>() == null).GroupBy(t => t.name)
+                         .Where(x => x.Count() > 1).Select(x => x.Key).ToList();
+            if (dup.Count > 0)
+            {
+                Debug.LogError("[RigTamHanh] " + fbx + ": nhiều transform trùng tên (" + string.Join(", ", dup)
+                    + ") -- Avatar sẽ khớp nhầm, T-pose sai. Xuất lại bằng Rig Tẩm Hành 1.30 trở lên "
+                    + "(node armature tên <tên>_Armature, không trùng tên file).");
+                return false;
+            }
+            var human = new List<HumanBone>();
+            var H = new Dictionary<string, Transform>();
+            foreach (var p in map.human)
+            {
+                if (!byName.TryGetValue(p.bone, out var t)) { Debug.LogError("[RigTamHanh] " + fbx + ": không có bone " + p.bone + " cho " + p.human); continue; }
+                var hb = new HumanBone { humanName = p.human, boneName = p.bone };
+                hb.limit.useDefaultValues = true;
+                human.Add(hb);
+                H[p.human] = t;
+            }
+            if (!map.keep_rest_pose) EnforceTPose(H);
+            var skeleton = all.Select(t => new SkeletonBone
+            {
+                name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale
+            }).ToArray();
+            desc = new HumanDescription
+            {
+                human = human.ToArray(), skeleton = skeleton,
+                upperArmTwist = .5f, lowerArmTwist = .5f, upperLegTwist = .5f, lowerLegTwist = .5f,
+                armStretch = .05f, legStretch = .05f, feetSpacing = 0f, hasTranslationDoF = false,
+            };
+            return true;
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
-    static Map Load(string path)
+    static void SetupClips(ModelImporter mi, Map map, string fbx, string clip, bool isSet)
     {
-        return File.Exists(path) ? JsonUtility.FromJson<Map>(File.ReadAllText(path)) : null;
+        var model = AssetDatabase.LoadAssetAtPath<GameObject>(fbx);
+        var paths = model == null ? new List<string>() : model.GetComponentsInChildren<Transform>(true)
+            .Where(t => t != model.transform)
+            .Select(t => AnimationUtility.CalculateTransformPath(t, model.transform)).ToList();
+        var clips = mi.defaultClipAnimations;
+        foreach (var c in clips)
+        {
+            // take nhiều clip: tên "<armature>|<action>", lấy phần sau '|'
+            string take = c.takeName.Substring(c.takeName.LastIndexOf('|') + 1);
+            c.name = (clip != null && !isSet) ? clip : take;
+            var info = map.clips == null ? null : map.clips.FirstOrDefault(x => x.name == c.name && (!isSet || x.file == clip))
+                       ?? map.clips.FirstOrDefault(x => x.name == c.name);
+            c.loopTime = info != null && info.loop;
+            if (map.keep_extra)
+            {
+                // Humanoid chỉ giữ đường cong của bone Humanoid; mask này giữ
+                // luôn bone mặt / tai / Palm.
+                var mask = new AvatarMask();
+                mask.transformCount = paths.Count;
+                for (int i = 0; i < paths.Count; i++)
+                {
+                    mask.SetTransformPath(i, paths[i]);
+                    mask.SetTransformActive(i, true);
+                }
+                c.maskType = ClipAnimationMaskType.CreateFromThisModel;
+                c.ConfigureClipFromMask(mask);
+            }
+        }
+        mi.clipAnimations = clips;
     }
 
-    static string Stamp(string json)
+    static void Reimport(ModelImporter mi, bool anim)
     {
-        return Marker + File.GetLastWriteTimeUtc(json).Ticks;
+        mi.bakeAxisConversion = true;
+        mi.importBlendShapes = true;
+        mi.importAnimation = anim;
+        mi.SaveAndReimport();
     }
+
+    static Avatar BaseAvatar(string baseFbx, string stamp)
+    {
+        var bi = AssetImporter.GetAtPath(baseFbx) as ModelImporter;
+        if (bi == null || bi.userData != stamp) return null;
+        return AssetDatabase.LoadAllAssetsAtPath(baseFbx).OfType<Avatar>().FirstOrDefault(a => a.isHuman && a.isValid);
+    }
+
+    // ------------------------------------------------------------ import
+
+    // Không giữ trạng thái gì từ OnPreprocessModel / OnPostprocessModel: khi
+    // Unity import song song (AssetImportWorker), hai hàm đó chạy ở TIẾN TRÌNH
+    // KHÁC -- biến tĩnh, delayCall đặt ở đó không về tới editor chính (bản v2
+    // dựa vào delayCall trong OnPostprocessModel nên có lúc FBX ra Generic).
+    static readonly HashSet<string> pending = new HashSet<string>();
+    static bool scheduled;
 
     void OnPreprocessModel()
     {
-        if (!assetPath.ToLower().EndsWith(".fbx")) return;
+        if (!IsFbx(assetPath)) return;
         string json = JsonFor(assetPath, out _, out string clip);
         Map map = Load(json);
         if (map == null) return;
@@ -1307,124 +1713,130 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
         imp.importAnimation = clip != null || map.combined;
     }
 
-    void OnPostprocessModel(GameObject root)
+    static void OnPostprocessAllAssets(string[] imported, string[] deleted, string[] moved, string[] movedFrom)
     {
-        if (!assetPath.ToLower().EndsWith(".fbx")) return;
-        string json = JsonFor(assetPath, out string baseFbx, out string clip);
-        Map map = Load(json);
-        if (map == null) return;
-        var imp = (ModelImporter)assetImporter;
-        if (imp.userData == Stamp(json) && imp.animationType == ModelImporterAnimationType.Human) return;
-        string other = OtherImporter();
-        if (other != null)
+        foreach (var p in imported.Concat(moved))
         {
-            Debug.LogError("[RigTamHanh] Project còn script " + other + " cũng dựng Avatar Humanoid -- xoá nó đi rồi Reimport " + assetPath);
-            return;
-        }
-
-        var all = root.GetComponentsInChildren<Transform>(true);
-        var names = new HashSet<string>(all.Select(t => t.name));
-        var human = new List<HumanBone>();
-        foreach (var p in map.human)
-        {
-            if (!names.Contains(p.bone)) { Debug.LogError("[RigTamHanh] " + assetPath + ": không có bone " + p.bone + " cho " + p.human); continue; }
-            var hb = new HumanBone { humanName = p.human, boneName = p.bone };
-            hb.limit.useDefaultValues = true;
-            human.Add(hb);
-        }
-        // Tư thế tham chiếu của Avatar = T-pose; cây transform trả lại như cũ ngay
-        // sau khi chép, nên mô hình import ra vẫn đúng dáng trong Blender.
-        var saved = all.ToDictionary(t => t, t => t.localRotation);
-        if (!map.keep_rest_pose)
-        {
-            var byName = new Dictionary<string, Transform>();
-            foreach (var t in all) byName[t.name] = t;
-            var H = new Dictionary<string, Transform>();
-            foreach (var hb in human) H[hb.humanName] = byName[hb.boneName];
-            EnforceTPose(H);
-        }
-        var skeleton = all.Select(t => new SkeletonBone
-        {
-            name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale
-        }).ToArray();
-        foreach (var kv in saved) kv.Key.localRotation = kv.Value;
-        var paths = all.Where(t => t != root.transform)
-                       .Select(t => AnimationUtility.CalculateTransformPath(t, root.transform)).ToList();
-        string path = assetPath;
-
-        EditorApplication.delayCall += () =>
-        {
-            var mi = AssetImporter.GetAtPath(path) as ModelImporter;
-            if (mi == null) return;
-            var desc = new HumanDescription
+            if (p.ToLower().EndsWith(".humanoid.json"))
             {
-                human = human.ToArray(), skeleton = skeleton,
-                upperArmTwist = .5f, lowerArmTwist = .5f, upperLegTwist = .5f, lowerLegTwist = .5f,
-                armStretch = .05f, legStretch = .05f, feetSpacing = 0f, hasTranslationDoF = false,
-            };
-            mi.animationType = ModelImporterAnimationType.Human;
-            Avatar src = clip == null ? null
-                : AssetDatabase.LoadAllAssetsAtPath(baseFbx).OfType<Avatar>().FirstOrDefault(a => a.isHuman);
-            if (src != null)
-            {
-                mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
-                mi.sourceAvatar = src;
+                string dir = Path.GetDirectoryName(p).Replace('\\', '/');
+                string file = Path.GetFileName(p);
+                string ch = file.Substring(0, file.Length - ".humanoid.json".Length);
+                if (File.Exists(dir + "/" + ch + ".fbx")) pending.Add(dir + "/" + ch + ".fbx");
+                foreach (var f in Directory.GetFiles(dir, ch + "@*.fbx")) pending.Add(f.Replace('\\', '/'));
             }
-            else
-            {
-                mi.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
-                mi.humanDescription = desc;
-            }
-            if (clip != null || map.combined)
-            {
-                var clips = mi.defaultClipAnimations;
-                foreach (var c in clips)
-                {
-                    // file gộp: take tên "<armature>|<action>", lấy phần sau '|'
-                    c.name = clip ?? c.takeName.Substring(c.takeName.LastIndexOf('|') + 1);
-                    var info = map.clips == null ? null : map.clips.FirstOrDefault(x => x.name == c.name);
-                    c.loopTime = info != null && info.loop;
-                    if (map.keep_extra)
-                    {
-                        // Humanoid chỉ giữ đường cong của bone Humanoid; mask này giữ
-                        // luôn bone mặt / tai / Palm.
-                        var mask = new AvatarMask();
-                        mask.transformCount = paths.Count;
-                        for (int i = 0; i < paths.Count; i++)
-                        {
-                            mask.SetTransformPath(i, paths[i]);
-                            mask.SetTransformActive(i, true);
-                        }
-                        c.maskType = ClipAnimationMaskType.CreateFromThisModel;
-                        c.ConfigureClipFromMask(mask);
-                    }
-                }
-                mi.clipAnimations = clips;
-            }
-            mi.userData = Stamp(json);
-            mi.SaveAndReimport();
-            if (clip == null) ShareAvatar(baseFbx, json);
-        };
+            else if (IsFbx(p) && File.Exists(JsonFor(p, out _, out _)))
+                pending.Add(p);
+        }
+        if (pending.Count > 0 && !scheduled)
+        {
+            scheduled = true;
+            EditorApplication.delayCall += Flush;
+        }
     }
 
-    // File animation import trước mô hình thì chưa có Avatar để chép, nên tự
-    // dựng tạm một cái. Mô hình dựng xong Avatar thì gán lại cho cả nhóm.
+    static void Flush()
+    {
+        scheduled = false;
+        var list = pending.ToList();
+        pending.Clear();
+        // mô hình trước, animation sau
+        foreach (var p in list.OrderBy(p => Path.GetFileName(p).Contains("@") ? 1 : 0))
+        {
+            try { Process(p); }
+            catch (System.Exception e) { Debug.LogException(e); }
+        }
+    }
+
+    static void Process(string fbx)
+    {
+        string json = JsonFor(fbx, out string baseFbx, out string clip);
+        Map map = Load(json);
+        var mi = AssetImporter.GetAtPath(fbx) as ModelImporter;
+        if (map == null || mi == null) return;
+        string stamp = Stamp(json);
+        bool anim = clip != null || map.combined;
+        bool isSet = clip != null && map.sets != null && map.sets.Contains(clip);
+        bool human = mi.animationType == ModelImporterAnimationType.Human;
+
+        if (clip == null)
+        {
+            if (mi.userData == stamp && human) { Check(fbx); ShareAvatar(fbx, json); return; }
+        }
+        else
+        {
+            Avatar src0 = BaseAvatar(baseFbx, stamp);
+            if (mi.userData == stamp && human && (src0 == null || mi.sourceAvatar == src0)) return;
+            // mô hình còn đang dựng Avatar: đợi, ShareAvatar sẽ gọi lại
+            if (src0 == null && File.Exists(baseFbx)) return;
+        }
+        string other = OtherImporter();
+        if (other != null) { WarnOther(other, fbx); return; }
+        // thiết lập trục / blendshape / animation chưa lưu (json tới sau, hoặc
+        // mới chỉ đặt tạm trong OnPreprocessModel): lưu và import lại rồi mới dựng
+        if (!mi.bakeAxisConversion || !mi.importBlendShapes || mi.importAnimation != anim) { Reimport(mi, anim); return; }
+
+        Avatar src = clip == null ? null : BaseAvatar(baseFbx, stamp);
+        mi.animationType = ModelImporterAnimationType.Human;
+        if (src != null)
+        {
+            mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
+            mi.sourceAvatar = src;
+        }
+        else
+        {
+            if (!Describe(fbx, map, out var desc)) return;
+            mi.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+            mi.humanDescription = desc;
+        }
+        if (anim) SetupClips(mi, map, fbx, clip, isSet);
+        mi.bakeAxisConversion = true;
+        mi.importBlendShapes = true;
+        mi.importAnimation = anim;
+        mi.userData = stamp;
+        mi.SaveAndReimport();
+    }
+
+    static void Check(string fbx)
+    {
+        var av = AssetDatabase.LoadAllAssetsAtPath(fbx).OfType<Avatar>().FirstOrDefault();
+        if (av == null || !av.isHuman || !av.isValid)
+            Debug.LogError("[RigTamHanh] " + fbx + ": Avatar Humanoid KHÔNG hợp lệ -- xem cảnh báo của Avatar trong Inspector, "
+                + "sửa rồi chọn FBX, Assets > Rig Tẩm Hành > Dựng lại Avatar Humanoid.");
+    }
+
+    // Mô hình dựng xong Avatar: các file animation cùng nhóm chép Avatar đó.
     static void ShareAvatar(string baseFbx, string json)
     {
-        var avatar = AssetDatabase.LoadAllAssetsAtPath(baseFbx).OfType<Avatar>().FirstOrDefault(a => a.isHuman);
-        if (avatar == null) return;
         string dir = Path.GetDirectoryName(baseFbx).Replace('\\', '/');
         string ch = Path.GetFileNameWithoutExtension(baseFbx);
         foreach (var f in Directory.GetFiles(dir, ch + "@*.fbx"))
+            Process(f.Replace('\\', '/'));
+    }
+
+    [MenuItem("Assets/Rig Tẩm Hành/Dựng lại Avatar Humanoid")]
+    static void Rebuild()
+    {
+        var picked = Selection.objects.Select(AssetDatabase.GetAssetPath).Where(IsFbx).ToList();
+        foreach (var p in picked.OrderBy(p => Path.GetFileName(p).Contains("@") ? 1 : 0))
         {
-            var mi = AssetImporter.GetAtPath(f.Replace('\\', '/')) as ModelImporter;
-            if (mi == null || (mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar == avatar)) continue;
-            mi.animationType = ModelImporterAnimationType.Human;
-            mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
-            mi.sourceAvatar = avatar;
-            mi.userData = Stamp(json);
-            mi.SaveAndReimport();
+            string json = JsonFor(p, out _, out string clip);
+            Map map = Load(json);
+            var mi = AssetImporter.GetAtPath(p) as ModelImporter;
+            if (map == null || mi == null)
+            {
+                Debug.LogWarning("[RigTamHanh] " + p + ": không có " + json + " nằm cạnh");
+                continue;
+            }
+            mi.userData = "";
+            Reimport(mi, clip != null || map.combined);
         }
+    }
+
+    [MenuItem("Assets/Rig Tẩm Hành/Dựng lại Avatar Humanoid", true)]
+    static bool RebuildValid()
+    {
+        return Selection.objects.Any(o => IsFbx(AssetDatabase.GetAssetPath(o)));
     }
 }
 '''

@@ -7,6 +7,45 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.30.0 — 2026-11-16
+
+**Unity: sửa lỗi FBX ra Generic và T-pose sai.** Script import viết lại (v3).
+- T-pose hỏng: node armature trong FBX mang đúng tên nhân vật -- trùng tên node
+  gốc Unity đặt theo tên file. Unity khớp transform theo tên nên lấy nhầm node
+  gốc, tư thế tham chiếu của Avatar bị xoay (đo, Unity 2022.3: hướng đùi y = 0,
+  tức chân nằm ngang). Nay node armature tên `<tên>_Armature`; script Unity gặp
+  file cũ còn trùng tên thì báo lỗi, không dựng Avatar sai.
+- Generic: bản cũ dựng Avatar bằng `delayCall` đặt trong `OnPostprocessModel`.
+  Unity import song song (AssetImportWorker -- có trong project thật) thì hàm đó
+  chạy ở tiến trình phụ, `delayCall` không về editor chính. Nay dựng trong
+  `OnPostprocessAllAssets` (luôn ở editor chính), từ mô hình đã import xong.
+- json tới sau FBX (Unity đang mở lúc Blender ghi, hoặc chép từng file): json
+  tới là FBX cùng nhóm được import lại. Blender cũng ghi json TRƯỚC FBX.
+- File animation không tự dựng Avatar từ frame đầu của clip khi import trước mô
+  hình nữa: đợi mô hình dựng xong rồi chép Avatar đó.
+- Còn script import Humanoid khác: hỏi xoá (không hỏi trong batchmode).
+- Menu *Assets → Rig Tẩm Hành → Dựng lại Avatar Humanoid*; Avatar không hợp lệ
+  thì Console báo.
+
+**Mesh xuất** (`scope`): mọi mesh của rig / mesh đang chọn / mesh đang hiện /
+mesh trong một collection. Mesh có key chạy bằng driver mà mesh nó bám không
+được xuất thì xuất riêng (key đứng yên).
+
+**Bộ action** (giống action collection): bộ có tên, lưu trên rig, mỗi bộ một
+file `<tên>@<bộ>.fbx` mỗi action một take; json ghi `sets` và `file` của từng
+clip để Unity đặt tên clip theo take.
+
+Test: `unity_sets` (15 mục). Kiểm trong Unity 2022.3.62 và 6000.3.9 (project
+nháp, batchmode), cả hai giống nhau:
+- chép cả nhóm (mỗi clip một file / theo bộ / gộp): mô hình Human, Avatar hợp
+  lệ; file clip / bộ CopyFromOther đúng Avatar mô hình; take đặt tên đúng action;
+- import ở tiến trình phụ (OutOfProcessPerQueue): như trên;
+- json tới sau FBX: trước Generic, json tới -> Human;
+- tư thế tham chiếu Avatar: hướng cánh tay / cẳng tay / ngón y = 0.00, đùi /
+  cẳng chân y = -1.00 (bản 1.29 trên cùng file: đùi y = 0.00);
+- còn script import cũ: FBX để Generic, Console chỉ đúng file script; xoá xong,
+  menu Dựng lại -> Human.
+
 ## 1.29.0 — 2026-11-13
 
 **Face rig bằng bendy bone** (`facebendy.py`, nút trong khu *Mặt*): điều khiển

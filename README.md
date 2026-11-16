@@ -229,23 +229,32 @@ Có hai cách điều khiển biểu cảm, dùng một trong hai (hoặc cả h
 
 1. Chọn rig, thư mục xuất (chọn thẳng một thư mục trong `Assets/` của project Unity là
    tiện nhất) và tên nhân vật.
-2. Chọn clip: để *Các clip được tích*, danh sách bên dưới hiện mọi animation clip có **slot**
+2. **Mesh xuất**: *Mọi mesh của rig*, *Mesh đang chọn*, *Mesh đang hiện* (đang ẩn thì bỏ)
+   hoặc *Mesh trong collection*. Dòng bên dưới liệt kê mesh sẽ vào file. Khung xương luôn đủ.
+3. Chọn clip: để *Các clip được tích*, danh sách bên dưới hiện mọi animation clip có **slot**
    dành cho rig (slot rig đang dùng, slot trùng tên rig, hoặc slot có kênh trỏ vào xương của rig),
    kèm khoảng frame. Tích clip nào thì clip đó được xuất; hai nút ☑ / ☐ để tích hết / bỏ hết.
    Lựa chọn lưu ngay trên từng action nên mở lại file vẫn nhớ. Mặc định mọi clip đều được tích.
-3. **Kiểm tra Humanoid**: báo xương nào thiếu hay sai trước khi xuất, kèm clip nào sẽ bị bỏ.
-4. **Xuất FBX cho Unity**: ra `<tên>.fbx` (mô hình), `<tên>@<action>.fbx` (mỗi animation một
+   **Theo bộ action** (giống action collection): tạo các bộ có tên (Locomotion, Combat…), thêm
+   action vào từng bộ (nút +, hoặc *Thêm các clip đang tích*). Mỗi bộ được tích ra một file
+   `<tên>@<bộ>.fbx`, mỗi action một take; Unity tự đặt tên clip theo action. Bộ lưu trên rig.
+4. **Kiểm tra Humanoid**: báo xương nào thiếu hay sai trước khi xuất, kèm clip nào sẽ bị bỏ.
+5. **Xuất FBX cho Unity**: ra `<tên>.fbx` (mô hình), `<tên>@<action>.fbx` (mỗi animation một
    file, hoặc *Gộp animation vào file nhân vật*), `<tên>.humanoid.json` (bảng ánh xạ) và
    script `RigTamHanhHumanoidImporter.cs`.
-5. Nếu thư mục xuất nằm trong project Unity, script tự vào `Assets/Editor/RigTamHanh`; không
+6. Nếu thư mục xuất nằm trong project Unity, script tự vào `Assets/Editor/RigTamHanh`; không
    thì chép nó vào một thư mục `Editor` bất kỳ. Unity import FBX thành Humanoid với đúng bảng
    ánh xạ — không dùng auto-map.
 
 **Avatar theo T-pose** (mặc định bật): Avatar lấy T-pose làm tư thế tham chiếu — tay,
 bàn tay, ngón thẳng ngang, chân thẳng đứng — như nút *Enforce T-Pose* của Unity, nên animation
-retarget sang không bị lệch góc. Mô hình vẫn giữ đúng dáng trong Blender. Project Unity chỉ
-nên có một script import này; nếu còn script import Humanoid khác, Console báo lỗi và yêu cầu
-xoá trước.
+retarget sang không bị lệch góc. Mô hình vẫn giữ đúng dáng trong Blender.
+
+Script import dựng Avatar sau khi Unity import xong cả đợt, nên chạy đúng cả khi Unity import
+song song (AssetImportWorker), khi json tới sau FBX, hay khi file animation import trước mô
+hình. Project chỉ nên có một script import Humanoid: còn script khác (bản cũ) thì Unity hỏi
+xoá. Avatar hỏng thì Console báo; làm lại tay: chọn FBX → *Assets → Rig Tẩm Hành → Dựng lại
+Avatar Humanoid*.
 
 Mặc định chỉ xuất xương Humanoid; weight của xương phụ dồn về xương Humanoid gần nhất.
 Unity mặc định dùng tối đa 4 xương mỗi vertex (Project Settings → Quality → Skin Weights).
