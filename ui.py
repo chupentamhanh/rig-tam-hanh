@@ -13,7 +13,7 @@ co nut "?" tren dau, noi dung o `uikit.HELP`.
 import bpy
 
 from . import (cloth, face, facebendy, fitref, generate, health, onion, picker, posekey, prefs, refrig,
-               remap, rigdef, uikit, unityexport, ux, weightfence, widgets)
+               remap, retarget, rigdef, uikit, unityexport, ux, weightfence, widgets)
 
 
 class _Base:
@@ -402,6 +402,17 @@ class SRP_PT_tools(_NeedRig, bpy.types.Panel):
             op.factor = percent / 100.0
 
 
+class SRP_PT_retarget(_NeedRig, bpy.types.Panel):
+    bl_label = "Retarget animation"
+    bl_idname = "SRP_PT_retarget"
+    bl_options = {'DEFAULT_CLOSED'}
+    zone = 'ANIM'
+    help = 'retarget'
+
+    def draw(self, context):
+        retarget.draw(self.layout, context)
+
+
 class SRP_PT_onion(_NeedRig, bpy.types.Panel):
     bl_label = "Onion skin"
     bl_idname = "SRP_PT_onion"
@@ -564,7 +575,7 @@ CLASSES = (
     SRP_PT_shape, SRP_PT_regions, SRP_PT_bind, SRP_PT_cloth,
     SRP_PT_face, SRP_PT_face_pose, SRP_PT_face_test, SRP_PT_face_config,
     SRP_PT_animate, SRP_PT_picker, SRP_PT_picker_hand, SRP_PT_picker_face,
-    SRP_PT_picker_extra, SRP_PT_fkik, SRP_PT_bake, SRP_PT_tools, SRP_PT_onion,
+    SRP_PT_picker_extra, SRP_PT_fkik, SRP_PT_bake, SRP_PT_tools, SRP_PT_retarget, SRP_PT_onion,
     SRP_PT_unity,
     SRP_PT_repair, SRP_PT_repair_logic, SRP_PT_repair_weights, SRP_PT_repair_health,
     SRP_PT_repair_shape, SRP_PT_repair_remap, SRP_PT_repair_solve,

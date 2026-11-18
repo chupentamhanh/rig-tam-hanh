@@ -7,6 +7,31 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.32.0 — 2026-11-18
+
+**Retarget animation** (`retarget.py`, panel *Retarget animation* ở khu Diễn).
+- Nguồn: armature bất kỳ -- Mixamo FBX, BVH, FBX khác, rig Rig Tẩm Hành khác.
+  Nút *Nhập file animation* gọi importer FBX / BVH; bộ xương nhập vào mà
+  hông -> đầu không chỉ lên (file Z-up / sai trục) thì tự xoay dựng đứng.
+- Ghép xương: bảng Humanoid (`unityexport.auto_map`) cho cả hai bên; sửa tay ở
+  text block `SRP_Retarget_Map`.
+- Mỗi frame: R_đích = Δ_nguồn · A · R_nghỉ_đích (hệ thế giới), Δ_nguồn là độ
+  xoay của bone nguồn so với lúc nghỉ. A nắn hướng xương lúc nghỉ CHỈ cho tay /
+  chân / ngón (A-pose ↔ T-pose); thân, cổ, đầu, hàm A = 1 -- xương gốc mỗi rig
+  đặt một kiểu: nắn Hips của Cat_Rig (nằm ngang) theo Hips Mixamo (dựng đứng)
+  làm đường hông xoay 90° (đo được, đã bỏ). Hai bên nhìn khác hướng thì xoay
+  nguồn quanh trục đứng trước. Hông dịch × (độ cao hông đích / nguồn).
+- Bake: tính ma trận pose cả cây xương bằng tay (không update depsgraph mỗi
+  bone), key thân / cổ / đầu / ngón / mũi chân và chuỗi FK; chi để IK thì từng
+  frame `snap.snap_ik_to_fk` + key control IK, pole, chuỗi lăn chân. Action mới
+  `<animation>_<rig>` có slot cho rig.
+- Đo (test `retarget`, 14 mục, nguồn kiểu Mixamo dựng tại chỗ: T-pose, cm,
+  scale 0.01): Mixamo / BVH / FBX -> Kid và Adult -> Kid: lệch hướng xương chi
+  ≤ 0.16°, đường vai / đường hông 0.0°; chân để IK lệch 0.14°; hông dịch đúng tỉ
+  lệ (0.615); đứng tại chỗ: hông đi ngang 0.
+- Trên bản sao Cat.blend (chibi, tỉ lệ hông 0.51): lệch hướng chi 0.0°, đường
+  vai / hông 0.0°, khớp cổ chân không thấp hơn lúc nghỉ (0.045 / 0.046 m).
+
 ## 1.31.0 — 2026-11-18
 
 **Rào weight theo vùng + Khám weight** (`weightfence.py`). Automatic weights và

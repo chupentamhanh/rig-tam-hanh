@@ -264,6 +264,14 @@ HELP = {
         "Dựng lại constraint, driver switch, driver hiện/ẩn collection, custom prop.",
         "An toàn: không đổi kết quả solve.",
     )),
+    'retarget': ("Retarget animation", (
+        "Chép animation từ bộ xương khác sang rig này, bake ra FK / IK.",
+        "1. Nhập file animation (FBX Mixamo, BVH) hoặc chọn armature nguồn có sẵn.",
+        "2. Chọn animation; xem số cặp xương ghép được, sai thì sửa bảng ghép.",
+        "3. Bù tỉ lệ thân: hông dịch theo tỉ lệ độ cao hông -- nhân vật chân ngắn",
+        "   bước ngắn lại. Đứng tại chỗ: bỏ phần hông đi ngang.",
+        "4. Retarget: ra action mới <animation>_<rig>, tay / chân theo FK hoặc IK.",
+    )),
     'repair_weights': ("Trọng số skin", (
         "Sửa weight… -- chọn một việc:",
         "  Tự làm mượt weight các khớp: chạy ngay sau Bind, trước khi vẽ tay.",

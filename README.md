@@ -236,6 +236,21 @@ Có hai cách điều khiển biểu cảm, dùng một trong hai (hoặc cả h
 - **Công cụ**: ghi key, nhảy key, lật pose sang bên kia, chọn bên kia, reset (đang chọn /
   cả rig), tween 25–75%.
 - **Onion skin**: hiện bóng các frame trước / sau.
+- **Retarget animation**: chép animation từ bộ xương khác sang rig — Mixamo FBX, BVH mocap,
+  FBX bất kỳ, hay rig Rig Tẩm Hành khác (Kid / Adult).
+  1. **Nhập file animation** (FBX / BVH; file lạ trục bị nằm thì addon tự dựng đứng), hoặc chọn
+     armature nguồn có sẵn trong file. Chọn animation (hoặc *Mọi animation của nguồn*).
+  2. Xem số cặp xương ghép được; ghép sai thì bấm nút sửa bảng (text block `SRP_Retarget_Map`,
+     dòng `LeftHand = tên bone nguồn`).
+  3. **Bù tỉ lệ thân** (mặc định bật): hông dịch theo tỉ lệ độ cao hông đích / nguồn — nhân vật
+     chibi chân ngắn bước ngắn lại, chân không trượt, không xuyên sàn. **Đứng tại chỗ**: bỏ phần
+     hông đi ngang (giữ nhún).
+  4. **Retarget**: ra action mới `<animation>_<rig>`. Thân, cổ, đầu, ngón key thẳng; tay / chân
+     key vào FK, chi để IK thì control IK + pole được bake theo từng frame — chỉnh tiếp bằng tay
+     được. Xuất Unity như animation thường.
+
+  Tay / chân nắn theo tư thế nghỉ (A-pose của nguồn sang T-pose của đích không lệch); thân, cổ,
+  đầu chép độ xoay và giữ dáng nghỉ riêng của nhân vật.
 
 <br clear="right">
 
