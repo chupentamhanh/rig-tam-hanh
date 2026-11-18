@@ -27,12 +27,18 @@ WEIGHT_TASKS = (
      "sâu: đặt lại vùng chuyển weight quanh các khớp đó", 'MOD_VERTEX_WEIGHT'),
     ('LEGS', "Sửa hông và gối (không đụng tay)",
      "Như trên nhưng để nguyên khuỷu tay", 'MOD_VERTEX_WEIGHT'),
+    ('FENCE', "Rào weight theo vùng",
+     "Gỡ weight của xương lấn sang vùng không phải của nó: vai lên má, hàm ra sau "
+     "gáy / xuống ngực, chân bên này sang chân bên kia. Vùng (đầu / thân / tay / "
+     "chân) lấy theo cấu trúc rig. Làm mượt chỗ vừa gỡ, tối đa 4 xương, normalize",
+     'MOD_MASK'),
     ('FILL', "Lấp chỗ thiếu weight",
      "Vertex có tổng weight chưa đủ (đứng yên khi pose) được lấp từ xung quanh",
      'BRUSH_DATA'),
 )
 _TASK_OP = {'BAKE': ("bake_weights", {}), 'JOINTS': ("hip_weights", {}),
-            'LEGS': ("hip_weights", {'part': 'LEGS'}), 'FILL': ("fill_weights", {})}
+            'LEGS': ("hip_weights", {'part': 'LEGS'}), 'FILL': ("fill_weights", {}),
+            'FENCE': ("weight_fence", {})}
 
 
 def _body(context):

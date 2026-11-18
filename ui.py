@@ -13,7 +13,7 @@ co nut "?" tren dau, noi dung o `uikit.HELP`.
 import bpy
 
 from . import (cloth, face, facebendy, fitref, generate, health, onion, picker, posekey, prefs, refrig,
-               remap, rigdef, uikit, unityexport, ux, widgets)
+               remap, rigdef, uikit, unityexport, ux, weightfence, widgets)
 
 
 class _Base:
@@ -484,6 +484,7 @@ class SRP_PT_repair_weights(_NeedRig, bpy.types.Panel):
         row = layout.row()
         row.scale_y = 1.3
         row.operator_menu_enum("srp.weights_fix", "task", text="Sửa weight…", icon='MOD_VERTEX_WEIGHT')
+        weightfence.draw_regions(layout, context)
         _rig, body = cloth._body_rig(context)
         if body is not None and len(context.scene.srp_generate.cloth_meshes):
             cloth.draw_sync(layout, context, body)

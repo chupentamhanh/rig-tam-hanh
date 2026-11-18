@@ -802,6 +802,13 @@ class SRP_OT_bind(bpy.types.Operator):
             dropped = drop_ref(context)
             if dropped:
                 message += " | đã xoá bộ ref %s" % dropped
+        # vùng đầu / thân / tay / chân của từng vertex cho Rào weight / Khám weight:
+        # tính ngay lúc weight còn là automatic (chưa ai sửa lấn vùng)
+        try:
+            from . import weightfence
+            weightfence.build_regions(mesh, rig)
+        except Exception as error:          # không được làm hỏng Bind
+            print("Rig Tẩm Hành: chưa tính được vùng weight:", error)
         self.report({'INFO'}, message)
         return {'FINISHED'}
 

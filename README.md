@@ -144,7 +144,23 @@ chuột; các mục tính lại weight đều hỏi lại trước, kèm số ve
 | **Tự làm mượt weight các khớp** | Ngay sau khi bind. Cho nhân vật qua khoảng 40 tư thế, tìm weight để vai, nách, mông, khuỷu gập mượt hơn (cách tính "Delta Mush"). Tối đa 4 xương mỗi vertex cho Unity. |
 | **Sửa hông, gối, khuỷu** | Háng gập thành khe, mông gãy khi giơ chân, khoeo/lòng khuỷu móp khi gập sâu. |
 | **Sửa hông và gối (không đụng tay)** | Như trên nhưng không chạm vào tay. |
+| **Rào weight theo vùng** | Xương lấn sang vùng không phải của nó: vai ăn lên má (nhún vai má bị kéo), hàm ăn ra sau gáy / xuống ngực (há miệng sau đầu bị kéo), đùi bên này ăn sang chân bên kia. Chỉ sửa vertex phạm luật, làm mượt chỗ vừa gỡ. |
 | **Lấp chỗ thiếu weight** | Có vertex tổng weight < 1 (đứng yên khi pose). |
+
+**Vùng weight & khám** (hộp ngay dưới menu):
+
+- Mỗi xương deform thuộc một vùng — **Đầu, Thân, Tay trái/phải, Chân trái/phải** — lấy theo
+  *cấu trúc rig*, không đoán theo tên: đầu và mọi xương con của nó; chuỗi tay / chân của rig
+  cùng xương gốc chi (Shoulder, Pelvis); phần còn lại là thân. Một số "cầu nối" được sang vùng
+  kề: cổ vào đầu, vai / đùi vào thân, xương thân chỗ chi bám vào chi, hai chân trộn nhau ở dải
+  giữa háng, vai được ăn chỗ cổ giáp vai. Hàm chỉ được ăn phía trước khớp hàm, không lên đỉnh
+  đầu, không xuống vai / ngực.
+- Mỗi vertex thuộc vùng có tổng weight lớn nhất, tự tính ngay sau **Bind** (attribute
+  `srp_region`). Vùng sai: vào Edit Mode của mesh thân, chọn vertex, bấm vùng đúng trong hộp.
+- **Khám weight**: không sửa gì, ghi báo cáo vào text block `SRP_Weight_Check` — xương lấn
+  vùng, chưa normalize, quá 4 xương, weight vụn, weight xa xương, lệch trái / phải; rồi cho
+  nhân vật qua ~40 tư thế (tay, chân, lưng, cổ, há miệng) xem vùng nào bị kéo theo sai, cạnh
+  lưới nào giãn quá mạnh.
 
 Ngay bên dưới là nút **Cập nhật quần áo** (như ở bước 6).
 

@@ -11,7 +11,7 @@ Xem CHANGELOG.md ben canh file nay: ghi doi gi o ban nao, kem SO DO DUOC.
 bl_info = {
     "name": "Rig Tẩm Hành",
     "author": "Chú Pen Tẩm Hành",
-    "version": (1, 30, 0),
+    "version": (1, 31, 0),
     "blender": (5, 0, 0),
     "location": "View3D > N-Panel > Rig Tẩm Hành",
     "description": "Dựng rig từ bộ xương ref hoặc theo nhân vật mẫu, weight, "
@@ -27,11 +27,11 @@ from bpy.props import BoolProperty
 
 from . import (prefs, compat, rigdef, build, health, snap, widgets, picker,
                tools, onion, refrig, cloth, generate, refsync, facerig, face, posekey,
-               mirrorkey, fitref, bakeweights, followkeys, facebendy, unityexport, remap, uikit, ux, ui)
+               mirrorkey, fitref, bakeweights, followkeys, facebendy, weightfence, unityexport, remap, uikit, ux, ui)
 
 _MODULES = (prefs, compat, rigdef, build, health, snap, widgets, picker, tools,
             onion, refrig, cloth, generate, refsync, facerig, face, posekey, mirrorkey,
-            fitref, bakeweights, followkeys, facebendy, unityexport, remap, uikit, ux, ui)
+            fitref, bakeweights, followkeys, facebendy, weightfence, unityexport, remap, uikit, ux, ui)
 
 
 class SRP_Preferences(bpy.types.AddonPreferences):
@@ -74,7 +74,7 @@ _CLASSES = ((SRP_Preferences,) + build.CLASSES + health.CLASSES + snap.CLASSES
             + widgets.CLASSES + picker.CLASSES + tools.CLASSES + onion.CLASSES
             + refrig.CLASSES + cloth.CLASSES + generate.CLASSES + refsync.CLASSES
             + face.CLASSES + posekey.CLASSES + mirrorkey.CLASSES
-            + fitref.CLASSES + bakeweights.CLASSES + followkeys.CLASSES + facebendy.CLASSES + unityexport.CLASSES + remap.CLASSES
+            + fitref.CLASSES + bakeweights.CLASSES + followkeys.CLASSES + facebendy.CLASSES + weightfence.CLASSES + unityexport.CLASSES + remap.CLASSES
             + uikit.CLASSES + ux.CLASSES + ui.CLASSES)
 
 

@@ -7,6 +7,38 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.31.0 — 2026-11-18
+
+**Rào weight theo vùng + Khám weight** (`weightfence.py`). Automatic weights và
+Delta Mush chỉ nhìn khoảng cách và độ mượt nên không chặn được lỗi "dính sai
+vùng" -- gặp trên con mèo: vai ăn lên má, hàm ăn ra sau gáy / xuống ngực, đùi
+bên này ăn sang chân bên kia.
+- Vùng của xương theo cấu trúc rig (đầu = xương đầu + con cháu; chi = chuỗi
+  `rigdef.limbs_for` + xương gốc chi leo lên tới chỗ nhánh có chi khác / đầu;
+  cổ = leo lên từ đầu tới chỗ có chi; còn lại là thân). Cầu nối: cổ vào đầu;
+  vai, đùi, xương gốc chi, đầu vào thân; 2 xương deform thân gần chỗ chi bám
+  vào chi (Hips / Hip_Master không deform chỉ là chỗ đi qua); đầu vào tay; hai
+  chân trộn trong dải giữa háng (0.25 khoảng cách hai khớp háng); vai / tay /
+  xương thân chỗ bám được ăn vertex đầu sát xương vai (dưới 1.0 lần khoảng
+  cách vai -> khớp đầu; đo: cổ mèo 0.5–0.9, má mèo ≥ 1.3, má Adult ≥ 1.56).
+  Hàm: theo khớp hàm, bớt dần từ 0.3 tới 0.45 chiều dài hàm phía sau khớp, từ
+  0.3 tới 0.65 phía trên, từ 0.6 tới 1.0 phía dưới; phần thừa về xương cha.
+- Vùng của vertex: vùng có tổng weight lớn nhất, attribute INT `srp_region`,
+  tự tính cuối Bind; gán / chọn vùng trong Edit Mode.
+- **Rào weight theo vùng** (mục mới trong *Sửa weight…*): chỉ sửa vertex phạm
+  luật (vertex vẽ tay giữ), làm mượt quanh chỗ gỡ đi ≥ 0.05, tối đa 4 xương,
+  normalize các vertex đã sửa. Đo:
+  - Adult sạch (đã vẽ tay): 4 vertex đổi, lệch tối đa < 0.02 (vụn 0.001 của hàm ở vai);
+  - Con mèo đã sửa tay (bản sao Cat.blend): 0 vertex đổi;
+  - cấy lại lỗi của con mèo vào bản sao: nhún vai má bị kéo 3.9 cm -> 0,
+    há miệng sau gáy 5.7 cm -> 0, ngực 6.9 cm -> 0 (184 vertex sửa);
+  - Adult cấy lỗi (vai lên má, hàm ra sau gáy, đùi trái sang chân phải): khám
+    tĩnh và khám tư thế đều thấy; rào xong nhún vai / há miệng: 0.00 mm.
+- **Khám weight** (hộp *Vùng weight & khám*): kiểm tĩnh + ~40 tư thế của
+  `bakeweights.training_poses` cộng há miệng (tính skin bằng ma trận, không
+  đụng pose rig, ~1 s trên Adult). Báo cáo ở text block `SRP_Weight_Check`.
+- Test mới: `weight_fence` (19 mục).
+
 ## 1.30.0 — 2026-11-16
 
 **Unity: sửa lỗi FBX ra Generic và T-pose sai.** Script import viết lại (v3).
