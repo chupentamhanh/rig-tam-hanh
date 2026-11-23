@@ -25,6 +25,9 @@ class _Base:
 
     @classmethod
     def poll(cls, context):
+        # Dang dat marker: giau het panel khac, chi con dung nhung nut can cho viec dat.
+        if markers.is_active():
+            return False
         return cls.zone is None or uikit.zone(context) == cls.zone
 
     def draw_header_preset(self, context):
@@ -93,10 +96,29 @@ class SRP_PT_markers(_Base, bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return uikit.focus(context) in (2, 3, 4)
+        return not markers.is_active() and uikit.focus(context) in (2, 3, 4)
 
     def draw(self, context):
         markers.draw_panel(self.layout, context)
+
+
+class SRP_PT_marker_mode(bpy.types.Panel):
+    """Panel duy nhat con lai trong luc dat marker."""
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Rig Tẩm Hành"
+    bl_label = "Đang đặt marker"
+    bl_idname = "SRP_PT_marker_mode"
+
+    @classmethod
+    def poll(cls, _context):
+        return markers.is_active()
+
+    def draw_header_preset(self, _context):
+        uikit.help_button(self.layout, 'markers')
+
+    def draw(self, context):
+        markers.draw_mode(self.layout, context)
 
 
 class SRP_PT_ref_start(_Step, bpy.types.Panel):
@@ -586,7 +608,7 @@ class SRP_PT_repair_solve(_NeedRig, bpy.types.Panel):
 # Cha phai dang ky truoc con; thu tu goc = thu tu tren thanh chon khu.
 CLASSES = (
     SRP_PT_zone,
-    SRP_PT_build, SRP_PT_markers, SRP_PT_ref_start, SRP_PT_ref_parts, SRP_PT_skeleton,
+    SRP_PT_marker_mode, SRP_PT_build, SRP_PT_markers, SRP_PT_ref_start, SRP_PT_ref_parts, SRP_PT_skeleton,
     SRP_PT_shape, SRP_PT_regions, SRP_PT_bind, SRP_PT_cloth,
     SRP_PT_face, SRP_PT_face_pose, SRP_PT_face_test, SRP_PT_face_config,
     SRP_PT_animate, SRP_PT_picker, SRP_PT_picker_hand, SRP_PT_picker_face,

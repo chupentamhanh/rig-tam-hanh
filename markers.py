@@ -1,16 +1,24 @@
-"""Dat marker theo tung khop, kieu Mixamo nhung chi tiet toi tung dot xuong.
+"""Dat marker theo tung khop, kieu Mixamo nhung du toi tung dot xuong.
 
 Marker KHONG thay bo ref: no la lop dat khop nam TREN bo ref. Moi marker la mot
-khop = mot nhom dau/duoi xuong ref trung nhau. "Ap dung" ghi vi tri + roll
-nguoc lai vao bo ref, con dung rig, IK/FK, xuat Unity van di duong cu.
+khop = mot nhom dau/duoi xuong ref trung nhau. "Xong" ghi vi tri + roll vao bo
+ref, con dung rig, IK/FK, xuat Unity van di duong cu.
 
-Roll (ly do truoc day bo marker) gio duoc TINH tu vi tri khop theo mot quy uoc
-co dinh, ve truc len viewport, va chinh duoc rieng tung xuong bang `srp_roll`
-(do) ghi tren chinh xuong ref.
+Thao tac gom trong MOT che do (`srp.marker_mode`):
+  click       = chon khop (khong bao gio tu nhay sang khop khac)
+  giu + keo   = doi khop
+  Ctrl+click  = dua khop dang chon toi cho click, vao giua khoi thit
+  chuot phai  = lui mot buoc
+  Enter       = xong, Esc = tam dung
+Dat cac KHOP CHINH la du: dot giua (cot song, dot ngon, doan chuoi) tu noi suy
+theo dang mau, van la marker that va keo duoc.
 
-Quy uoc: Y doc xuong, X la truc gap. Than: Z ra sau. Chan: Z ra truoc. Canh tay:
-Z ra sau. Ban tay + ngon: khung ban tay that. Tai, toc, quan ao: giu huong mau,
-xoay theo huong xuong. Ben R luon la anh guong cua ben L.
+Chong chon nham: empty marker nam trong collection tat han, khong the bam trung.
+Trong che do nay viewport chi nhan marker; moi click khac bi nuot.
+
+Quy uoc roll: Y doc xuong, X la truc gap. Than: Z ra sau. Chan: Z ra truoc. Canh
+tay: Z ra sau. Ban tay + ngon: khung ban tay that. Tai, toc, quan ao: giu huong
+mau, xoay theo huong xuong. Ben R luon la anh guong cua ben L.
 """
 
 import json
@@ -39,6 +47,8 @@ TAG_H0, TAG_T0, TAG_Z0 = "srp_mk_h0", "srp_mk_t0", "srp_mk_z0"
 
 EPS = 1e-5
 AXIS_RATIO = 0.035              # do dai truc ve tren viewport, theo chieu cao
+PICK_PX = 11                    # ban kinh bam trung marker (px, nhan ui_scale)
+DRAG_PX = 3                     # chuot dich it hon the nay la click, khong phai keo
 
 
 # ------------------------------------------------------------ tim marker
@@ -58,6 +68,11 @@ def ends_of(marker):
     return [e.rsplit(":", 1) for e in json.loads(marker.get(TAG_ENDS, "[]"))]
 
 
+def end_map(ref):
+    """{(ten xuong, 'H'/'T'): marker}"""
+    return {(n, e): m for m in markers_of(ref) for n, e in ends_of(m)}
+
+
 def bones_at(marker):
     """Xuong chinh roll tai khop nay: xuong bat dau o day, khop cuoi thi xuong ket thuc."""
     ends = ends_of(marker)
@@ -72,13 +87,22 @@ def _pair_side(name):
     return None, None
 
 
+def marker_side(marker):
+    for name, _end in ends_of(marker):
+        side = _pair_side(name)[0]
+        if side:
+            return side
+    return None
+
+
 # ---------------------------------------------------- gom dau/duoi thanh khop
 
 def joint_groups(ref):
     """[[(ten xuong, 'H'/'T'), ...]] — moi nhom la MOT khop.
 
-    Chi gop theo quan he cha/con/anh em. Gop theo vi tri tran thi hai xuong
-    khong lien quan tinh co trung nhau se bi dinh chat vao nhau.
+    Chi gop theo quan he cha/con. Goc chuoi toc moc o dinh dau nhung khac bo
+    phan nen la marker rieng. Xuong ban va dot ngon cung bo phan, khong noi lien
+    nhung trung diem: phai la MOT khop, khong thi nguoi dung dat hai lan.
     """
     root = {}
 
@@ -93,17 +117,19 @@ def joint_groups(ref):
         root[find(a)] = find(b)
 
     bones = list(ref.data.bones)
+    # Sai so theo CO nhan vat: mesh FBX co ma tran xoay / scale lam hai diem trung
+    # nhau lech vai phan van don vi, nguong co dinh se tach doi khop gốc ngón.
+    near = max(EPS, _ref_height(ref) * 2e-4)
     for bone in bones:
         find((bone.name, 'H'))
         find((bone.name, 'T'))
         up = bone.parent
         if up is None:
             continue
-        # Goc chuoi toc/tai moc o dinh dau nhung KHONG noi lien: phai la marker
-        # rieng, gop vao thi keo goc toc la keo luon dinh dau.
-        if bone.use_connect:
+        same_part = refrig.part_of(bone) == refrig.part_of(up)
+        if bone.use_connect or (same_part and (bone.head_local - up.tail_local).length < near):
             join((bone.name, 'H'), (up.name, 'T'))
-        elif (bone.head_local - up.head_local).length < EPS:
+        elif (bone.head_local - up.head_local).length < near:
             join((bone.name, 'H'), (up.name, 'H'))
     groups = {}
     for bone in bones:
@@ -124,30 +150,27 @@ def _world(ref, name, end):
 
 def sync_markers(context, ref, mesh=None):
     """Tao / cap nhat marker theo bo ref. Marker da co giu nguyen vi tri."""
-    old = {}
-    for marker in markers_of(ref):
-        for name, end in ends_of(marker):
-            old[(name, end)] = marker
+    old = end_map(ref)
     coll = bpy.data.collections.get(collection_name(ref))
     if coll is None:
         coll = bpy.data.collections.new(collection_name(ref))
         context.scene.collection.children.link(coll)
+    # Tat han: khong bam trung trong viewport lan outliner. Che do dat tu ve marker.
+    coll.hide_viewport = True
+    coll.hide_select = True
+    coll.hide_render = True
 
-    height = refrig.mesh_fit(mesh)[0] if mesh is not None else 1.7
     if TAG_CX not in ref.keys():
         ref[TAG_CX] = float(refrig.mesh_fit(mesh)[1].x) if mesh is not None else 0.0
-    size = height * 0.012
 
-    groups = joint_groups(ref)
     used, by_end = set(), {}
-    for group in groups:
-        marker = next((old[e] for e in group if e in old), None)
+    for group in joint_groups(ref):
+        marker = next((old[tuple(e)] for e in group if tuple(e) in old), None)
         if marker is None:
             marker = bpy.data.objects.new("MK_" + _key(group), None)
             coll.objects.link(marker)
             marker.empty_display_type = 'SPHERE'
-            marker.empty_display_size = size
-            marker.show_in_front = True
+            marker.empty_display_size = 0.01
             marker.hide_render = True
             marker.location = _world(ref, *group[0])
             marker[TAG_MARKER] = ref.name
@@ -160,11 +183,14 @@ def sync_markers(context, ref, mesh=None):
         if marker.name not in used:
             bpy.data.objects.remove(marker)
 
+    for marker in markers_of(ref):
+        marker.pop(TAG_PARENT, None)
     for bone in ref.data.bones:
         here, tip = by_end[(bone.name, 'H')], by_end[(bone.name, 'T')]
-        tip[TAG_PARENT] = here.name
-        # Spine va Hips chung mot khop: cha cua khop khong duoc la chinh no,
-        # khong thi duyet cay khop quay vong mai mai.
+        if tip != here:
+            tip[TAG_PARENT] = here.name
+    for bone in ref.data.bones:          # goc bo phan: cha la khop dau xuong cha
+        here = by_end[(bone.name, 'H')]
         if TAG_PARENT not in here.keys() and bone.parent is not None:
             up = by_end[(bone.parent.name, 'H')]
             if up != here:
@@ -181,10 +207,7 @@ def sync_markers(context, ref, mesh=None):
             bone[TAG_H0], bone[TAG_T0] = list(W @ bone.head_local), list(W @ bone.tail_local)
             bone[TAG_Z0] = list(z)
 
-    names = {}
-    for marker in markers_of(ref):
-        for name, end in ends_of(marker):
-            names[(name, end)] = marker
+    names = end_map(ref)
     for marker in markers_of(ref):
         marker.pop(TAG_TWIN, None)
         for name, end in ends_of(marker):
@@ -233,14 +256,29 @@ def mirror_all(ref, side='L'):
             mirror_from(ref, marker)
 
 
-# ------------------------------------------------------ dat + uoc luong
+def _on_own_side(ref, marker, point):
+    """Doi xung bat: click ben nao cung duoc, diem tu ve dung ben cua khop."""
+    side = marker_side(marker)
+    if side is None or is_center(marker):
+        return point
+    dx = point.x - ref.get(TAG_CX, 0.0)
+    if (side == 'L' and dx < 0.0) or (side == 'R' and dx > 0.0):
+        return mirror_point(ref, point)
+    return point
 
-def _descendants(ref, root):
+
+# ------------------------------------------------------ dat + noi suy
+
+def _children_map(ref):
     kids = {}
     for marker in markers_of(ref):
         up = marker.get(TAG_PARENT)
         if up:
             kids.setdefault(up, []).append(marker)
+    return kids
+
+
+def _descendants(root, kids):
     out, stack, seen = [], list(kids.get(root.name, ())), {root.name}
     while stack:
         marker = stack.pop()
@@ -252,46 +290,118 @@ def _descendants(ref, root):
     return out
 
 
-def _placed_ancestor(marker):
-    seen = set()
+def _parts_at(ref, marker):
+    return {refrig.part_of(ref.data.bones[n]) for n, _e in ends_of(marker)}
+
+
+def _walk_to_anchor(ref, marker):
+    """(moc da dat gan nhat, [khop chua dat nam giua, tu gan toi xa]).
+
+    Chi di trong CUNG bo phan. Vuot qua ranh gioi thi dat xuong don se keo ca
+    cot song va canh tay ben kia, vi chung deu la nhanh cua `Spine.003`.
+    """
+    mine = _parts_at(ref, marker)
+    seen, between = {marker.name}, []
     up = bpy.data.objects.get(marker.get(TAG_PARENT, ""))
-    while up is not None and up.name not in seen:
+    while up is not None and up.name not in seen and mine & _parts_at(ref, up):
         if up.get(TAG_PLACED):
-            return up
+            return up, between
         seen.add(up.name)
+        between.append(up)
         up = bpy.data.objects.get(up.get(TAG_PARENT, ""))
-    return None
+    return None, []
 
 
-def place(ref, marker, point, mirror=True):
-    """Dat mot khop, keo theo cac khop con CHUA dat de chung nam gan dung cho.
+def _ref_height(ref):
+    points = [p for b in ref.data.bones for p in (b.head_local, b.tail_local)]
+    return max((max(p.z for p in points) - min(p.z for p in points)), 1e-3) \
+        if points else 1.0
 
-    Co khop cha da dat thi dung phep dong dang (xoay + co gian quanh khop cha):
-    dat co tay xong, ca ban tay xoay va co theo canh tay that.
+
+def place(ref, marker, point, mirror=True, auto_side=True):
+    """Dat mot khop. Khop giua va khop con CHUA dat tu di theo.
+
+    Co moc da dat thi dung phep dong dang quanh moc: dat `Neck` xong, ba dot
+    lung giua tu chia theo dang cong cua mau. Khop qua sat moc (xuong don so voi
+    than) thi ti le vo nghia, chi tinh tien.
     """
     old = marker.location.copy()
     new = Vector(point)
+    if mirror and auto_side:
+        new = _on_own_side(ref, marker, new)
     if mirror and is_center(marker) and _center_side(marker):
         new.x = ref.get(TAG_CX, 0.0)
-    anchor = _placed_ancestor(marker)
-    tail = _descendants(ref, marker)
-    if anchor is not None and (old - anchor.location).length > 1e-5 \
-            and (new - anchor.location).length > 1e-5:
+
+    kids = _children_map(ref)
+    anchor, between = _walk_to_anchor(ref, marker)
+    moved = {m.name: m for m in _descendants(marker, kids)}
+    if between:
+        top = between[-1]
+        moved[top.name] = top
+        for m in _descendants(top, kids):
+            moved[m.name] = m
+    moved.pop(marker.name, None)
+
+    similar = False
+    if anchor is not None:
         pivot = anchor.location.copy()
         a, b = old - pivot, new - pivot
-        turn = a.rotation_difference(b).to_matrix()
-        scale = b.length / a.length
-        for child in tail:
-            child.location = pivot + turn @ (child.location - pivot) * scale
-    else:
-        for child in tail:
+        limit = _ref_height(ref) * 0.02
+        if a.length > limit and b.length > limit and 0.2 < b.length / a.length < 5.0:
+            similar = True
+            turn = a.rotation_difference(b).to_matrix()
+            scale = b.length / a.length
+            for child in moved.values():
+                child.location = pivot + turn @ (child.location - pivot) * scale
+    if not similar:
+        for child in moved.values():
             child.location += new - old
     marker.location = new
     marker[TAG_PLACED] = True
+    derive(ref)
     if mirror:
-        for child in tail:
-            mirror_from(ref, child)
-        mirror_from(ref, marker)
+        # Chi chep tu ben vua dat sang ben kia. Chep theo tung khop bi keo thi
+        # ben chua dat de len ben da dat, xoa luon vi tri va co "da dat".
+        mirror_all(ref, marker_side(marker) or 'L')
+
+
+def derive(ref):
+    """Hai dau xuong khong ai click: duoi xuong don va duoi ban tay."""
+    ends = end_map(ref)
+    bones = ref.data.bones
+    for (kind, inst, side), part in refrig.parts_in(ref).items():
+        if kind != 'ARM':
+            continue
+        shoulder, bicep = part.get("Shoulder"), part.get("Bicep")
+        if shoulder is not None and bicep is not None:
+            tip = ends[(shoulder.name, 'T')]
+            if not tip.get(TAG_PLACED):
+                h0, t0 = Vector(shoulder[TAG_H0]), Vector(shoulder[TAG_T0])
+                full = (Vector(bicep[TAG_H0]) - h0).length
+                frac = min((t0 - h0).length / full, 0.97) if full > 1e-6 else 0.85
+                a = ends[(shoulder.name, 'H')].location
+                b = ends[(bicep.name, 'H')].location
+                if (b - a).length > 1e-4:
+                    tip.location = a + (b - a) * frac
+        hand = part.get("Hand_Master")
+        if hand is None:
+            continue
+        tip = ends[(hand.name, 'T')]
+        if tip.get(TAG_PLACED):
+            continue
+        palms = [b for b in bones if b.get(refrig.TAG_PART) == 'HAND'
+                 and int(b.get(refrig.TAG_INST, 1)) == inst
+                 and (b.get(refrig.TAG_SIDE) or None) == side
+                 and (b.get(refrig.TAG_BASE) or "").startswith("Palm")
+                 and b.get(refrig.TAG_BASE) != "Palm.004"]
+        if not palms:
+            continue
+        w0, w1 = Vector(hand[TAG_H0]), ends[(hand.name, 'H')].location
+        k0 = sum((Vector(b[TAG_T0]) for b in palms), Vector()) / len(palms)
+        k1 = sum((ends[(b.name, 'T')].location for b in palms), Vector()) / len(palms)
+        if (k0 - w0).length > 1e-6 and (k1 - w1).length > 1e-6:
+            ratio = (Vector(hand[TAG_T0]) - w0).length / (k0 - w0).length
+            tip.location = w1 + (k1 - w1) * ratio
 
 
 def center_hit(tree, origin, direction):
@@ -324,20 +434,91 @@ def mesh_tree(context, mesh):
     return BVHTree.FromPolygons(points, polys)
 
 
-def queue_of(ref, mirror=True):
-    """Thu tu dat: di theo cay xuong, than truoc roi tay chan, ngon, mat."""
-    order = {'HIPS': 0, 'SPINE': 1, 'LEG': 2, 'ARM': 3, 'HAND': 4, 'CHAIN': 5}
-    rank = {}
-    for index, bone in enumerate(ref.data.bones):
-        kind = bone.get(refrig.TAG_PART, "")
-        rank[bone.name] = (order.get(kind, 6), index)
-    out = []
-    for marker in markers_of(ref):
-        names = [n for n, _e in ends_of(marker)]
-        if mirror and not is_center(marker) and any(_pair_side(n)[0] == 'R' for n in names):
+# --------------------------------------------------------- danh sach khop chinh
+
+_DIGITS = (("Thumb", "CÁI"), ("Index", "TRỎ"), ("Middle", "GIỮA"),
+           ("Ring", "ÁP ÚT"), ("Pinky", "ÚT"))
+STAGES = ("Thân", "Chân", "Tay", "Bàn tay", "Mặt", "Phụ kiện")
+
+
+def guide_of(ref, mirror=True):
+    """Cac khop nguoi dung can click, dung thu tu. Con lai tu noi suy.
+
+    [{"marker": ten, "stage": chang, "label": cau hoi}]
+    """
+    ends = end_map(ref)
+    out, seen = [], set()
+
+    def ask(stage, label, bone, end, side=None):
+        if bone is None:
+            return
+        marker = ends.get((bone.name, end))
+        if marker is None or marker.name in seen:
+            return
+        if mirror and not is_center(marker) and marker_side(marker) == 'R':
+            return
+        seen.add(marker.name)
+        if not mirror and side:
+            label += " " + ("TRÁI" if side == 'L' else "PHẢI")
+        out.append({"marker": marker.name, "stage": stage, "label": label})
+
+    parts = sorted(refrig.parts_in(ref).items(), key=lambda x: refrig.part_sort_key(x[0]))
+    for key, part in parts:
+        if key[0] == 'HIPS':
+            ask("Thân", "HÔNG (tâm chậu)", part.get("Hips"), 'H')
+    for key, part in parts:
+        if key[0] == 'SPINE':
+            ask("Thân", "GỐC CỔ", part.get("Neck"), 'H')
+            ask("Thân", "ĐÁY SỌ", part.get("Head"), 'H')
+            ask("Thân", "ĐỈNH ĐẦU", part.get("Head"), 'T')
+    for (kind, _i, side), part in parts:
+        if kind != 'LEG':
             continue
-        out.append((min(rank[n] for n in names), marker.name))
-    return [name for _r, name in sorted(out)]
+        beast = (part.get("Thigh") or {}).get(refrig.TAG_LEG, 'HUMAN') != 'HUMAN'
+        ask("Chân", "KHỚP HÁNG", part.get("Thigh"), 'H', side)
+        ask("Chân", "ĐẦU GỐI", part.get("Shin"), 'H', side)
+        ask("Chân", "CỔ CHÂN SAU" if beast else "CỔ CHÂN", part.get("Foot"), 'H', side)
+        ask("Chân", "CHỖ BÀN CHẠM ĐẤT" if beast else "GỐC NGÓN CHÂN", part.get("Toe"), 'H', side)
+        ask("Chân", "MŨI CHÂN", part.get("Toe"), 'T', side)
+        ask("Chân", "GÓT CHÂN", part.get("Heel"), 'H', side)
+    for (kind, _i, side), part in parts:
+        if kind != 'ARM':
+            continue
+        ask("Tay", "ĐẦU TRONG XƯƠNG ĐÒN (sát cổ)", part.get("Shoulder"), 'H', side)
+        ask("Tay", "KHỚP VAI", part.get("Bicep"), 'H', side)
+        ask("Tay", "KHUỶU TAY", part.get("Forearm"), 'H', side)
+        ask("Tay", "CỔ TAY", part.get("Hand_Master"), 'H', side)
+    for (kind, _i, side), part in parts:
+        if kind != 'HAND':
+            continue
+        for base, word in _DIGITS:
+            ask("Bàn tay", "GỐC NGÓN " + word, part.get(base), 'H', side)
+            ask("Bàn tay", "ĐẦU NGÓN " + word, part.get(base + ".002"), 'T', side)
+    for (kind, _i, _s), part in parts:
+        if kind not in refrig.FACE_KINDS:
+            continue
+        ask("Mặt", "BẢN LỀ HÀM", part.get("Jaw"), 'H')
+        ask("Mặt", "CHÓP CẰM", part.get("Jaw"), 'T')
+        ask("Mặt", "CHÓP MŨI", part.get("Nose"), 'T')
+        for side in 'LR':
+            ask("Mặt", "TÂM NHÃN CẦU", part.get("Eye." + side), 'H', side)
+            ask("Mặt", "GỐC TAI", part.get("Ear." + side), 'H', side)
+            ask("Mặt", "ĐẦU TAI", part.get("Ear." + side), 'T', side)
+    for (kind, _i, side), part in parts:
+        if kind != 'CHAIN':
+            continue
+        names = {b.name for b in part.values()}
+        roots = [b for b in part.values() if not b.parent or b.parent.name not in names]
+        for root in roots:
+            tip = root
+            while True:
+                nxt = [c for c in tip.children if c.name in names]
+                if not nxt:
+                    break
+                tip = nxt[0]
+            ask("Phụ kiện", "GỐC " + root.name, root, 'H', side)
+            ask("Phụ kiện", "CUỐI " + root.name, tip, 'T', side)
+    return out
 
 
 # ---------------------------------------------------------------- roll
@@ -379,7 +560,7 @@ def _hand_turn(ref, points):
             continue
         if len(palms) > 1:
             a0, a1 = tips0[-1] - tips0[0], tips1[-1] - tips1[0]
-            if _orth(a0, d0.normalized()).length > 0 and a0.length > 1e-6 and a1.length > 1e-6:
+            if a0.length > 1e-6 and a1.length > 1e-6:
                 out[key] = _frame(d1, a1) @ _frame(d0, a0).inverted()
                 continue
         out[key] = d0.rotation_difference(d1).to_matrix()
@@ -446,6 +627,150 @@ def frames(ref, mirror=True):
     return out
 
 
+def chain_bones(ref, marker):
+    """Chuoi xuong noi lien di qua khop nay, tu goc ra ngon (vd ca ngon cai)."""
+    names = bones_at(marker)
+    bones = ref.data.bones
+    start = next((bones[n] for n in names
+                  if bones[n].use_connect or any(c.use_connect for c in bones[n].children)),
+                 bones[names[0]])
+    while start.use_connect and start.parent is not None:
+        start = start.parent
+    out = [start]
+    while True:
+        nxt = [c for c in out[-1].children if c.use_connect]
+        if not nxt:
+            return out
+        out.append(nxt[0])
+
+
+def _source_chain(ref, marker, mirror):
+    """Doi xung: luon tinh tren ben L, ben R tu lay anh guong."""
+    if mirror and marker_side(marker) == 'R' and marker.get(TAG_TWIN):
+        twin = bpy.data.objects.get(marker[TAG_TWIN])
+        if twin is not None:
+            return chain_bones(ref, twin)
+    return chain_bones(ref, marker)
+
+
+def center_joint(tree, point, direction, reach, limit=None):
+    """Dua mot khop vao giua tiet dien thit, chi dich VUONG GOC voi huong xuong.
+
+    Dich qua `limit` la dang bam nham bo phan khac (canh, ban tay ke ben): giu
+    nguyen cho cu, de nguoi dung tu keo con hon la be gay ca chuoi.
+    """
+    limit = reach if limit is None else limit
+    d = direction.normalized()
+    u = _orth(Vector((0, 0, 1)), d)
+    v = d.cross(u)
+    p = point.copy()
+    found = tree.find_nearest(p)
+    if found[0] is not None and found[1] is not None \
+            and (p - found[0]).dot(found[1]) > 0.0:     # dang nam ngoai da
+        if (p - found[0]).length > limit:
+            return point.copy()
+        p = found[0] - found[1] * min(reach * 0.1, 0.002)
+    # Moi vong chi rut lech con mot nua (trung diem cac day cung), nen can nhieu vong.
+    for _round in range(14):
+        mids = []
+        for i in range(8):
+            a = math.pi * i / 8.0
+            ray = (u * math.cos(a) + v * math.sin(a)).normalized()
+            one = tree.ray_cast(p, ray, reach)
+            two = tree.ray_cast(p, -ray, reach)
+            # Phai cham mat TRONG ca hai phia, khong thi tia da chui sang bo phan khac
+            if one[0] is None or two[0] is None:
+                continue
+            if one[1].dot(ray) <= 0.0 or two[1].dot(-ray) <= 0.0:
+                continue
+            mids.append((one[0] + two[0]) * 0.5)
+        if len(mids) < 2:
+            break
+        mid = sum(mids, Vector()) / len(mids)
+        step = mid - p
+        p += step - d * step.dot(d)
+        if step.length < 1e-5:
+            break
+    shift = (p - point) - d * (p - point).dot(d)
+    if shift.length > limit:
+        return point.copy()
+    return point + shift
+
+
+def center_chain(ref, tree, marker, mirror=True):
+    """Can moi khop cua chuoi vao giua thit. Tra ve so khop da dich.
+
+    Khop nao lam mot doan xuong doi huong qua 25 do thi tra ve cho cu: can giua
+    chi duoc tinh chinh, khong duoc doi dang cua ngon.
+    """
+    chain = _source_chain(ref, marker, mirror)
+    ends = end_map(ref)
+    joints = [ends[(b.name, 'H')] for b in chain] + [ends[(chain[-1].name, 'T')]]
+    old = [m.location.copy() for m in joints]
+    new = []
+    for i, point in enumerate(old):
+        a, b = old[max(i - 1, 0)], old[min(i + 1, len(old) - 1)]
+        near = [(old[j] - point).length for j in (i - 1, i + 1) if 0 <= j < len(old)]
+        near = [x for x in near if x > 1e-6]
+        if (b - a).length < 1e-6 or not near:
+            new.append(point.copy())
+            continue
+        step = min(near)
+        new.append(center_joint(tree, point, b - a, max(step, 1e-3), step * 0.6))
+    for _pass in range(len(new)):
+        bad = None
+        for i in range(len(new) - 1):
+            before, after = old[i + 1] - old[i], new[i + 1] - new[i]
+            if after.length < 1e-6 or before.angle(after) > math.radians(25.0):
+                # tra ve khop dich nhieu hon trong hai dau doan
+                bad = max((i, i + 1), key=lambda j: (new[j] - old[j]).length)
+                break
+        if bad is None or (new[bad] - old[bad]).length < 1e-9:
+            break
+        new[bad] = old[bad].copy()
+    moved = 0
+    for m, before, after in zip(joints, old, new):
+        if (after - before).length > 1e-5:
+            m.location = after
+            m[TAG_PLACED] = True
+            moved += 1
+    if not moved:
+        return 0
+    derive(ref)
+    if mirror:
+        mirror_all(ref, marker_side(joints[0]) or 'L')
+    return moved
+
+
+def hinge_chain(ref, marker, mirror=True):
+    """Dat truc X cua ca chuoi trung truc gap that, suy tu dang cong cua no.
+
+    Tra ve (so xuong, None) hoac (0, ly do).
+    """
+    chain = _source_chain(ref, marker, mirror)
+    if len(chain) < 2:
+        return 0, "Chuỗi chỉ có một xương, chỉnh bằng nút xoay"
+    plan = frames(ref, mirror)
+    dirs = [(plan[b.name][1] - plan[b.name][0]).normalized() for b in chain]
+    bends = [a.cross(b) for a, b in zip(dirs, dirs[1:])]
+    # Lat cac doan cong nguoc ve cung phia voi doan cong nhieu nhat
+    main = max(bends, key=lambda c: c.length)
+    hinge = sum((c if c.dot(main) >= 0.0 else -c for c in bends), Vector())
+    if hinge.length < math.sin(math.radians(2.0)):
+        return 0, "Chuỗi gần như thẳng nên chưa suy ra được trục gập, hãy uốn nhẹ các đốt"
+    hinge.normalize()
+    now_x = sum((d.cross(plan[b.name][2]) for b, d in zip(chain, dirs)), Vector())
+    if hinge.dot(now_x) < 0.0:
+        hinge = -hinge
+    turn = _hand_turn(ref, bone_points(ref))
+    for bone, d in zip(chain, dirs):
+        base = auto_z(bone, d, turn)
+        want = _orth(hinge, d).cross(d).normalized()
+        deg = math.degrees(math.atan2(d.dot(base.cross(want)), base.dot(want)))
+        bone[TAG_ROLL] = deg
+    return len(chain), None
+
+
 def zero_bones(ref):
     """Xuong dai bang 0 — Blender se XOA chung khi thoat Edit Mode."""
     return sorted(n for n, (h, t, _z) in frames(ref).items() if (t - h).length < 1e-4)
@@ -468,7 +793,6 @@ def apply_markers(context, ref, mirror=True):
         edit = ref.data.edit_bones
         for name, (head, tail, _z) in plan.items():
             bone = edit[name]
-            bone.use_connect = bone.use_connect and bone.parent is not None
             bone.head, bone.tail = inv @ head, inv @ tail
         for name, (_h, _t, z) in plan.items():
             if z is not None:
@@ -518,41 +842,37 @@ def build_template(context, ref, mesh, settings, face=False):
 # ---------------------------------------------------------------- overlay
 
 _draw_view = _draw_text = None
-_place_state = {}
+_S = {"active": False}
 
 
-def _active_ref():
-    context = bpy.context
-    obj = getattr(context, "active_object", None)
-    if obj is not None and obj.get(TAG_MARKER):
-        return bpy.data.objects.get(obj[TAG_MARKER])
-    scene = getattr(context, "scene", None)
-    if scene is None:
-        return None
-    for candidate in scene.objects:
-        if candidate.type == 'EMPTY' and candidate.get(TAG_MARKER) \
-                and candidate.visible_get():
-            return bpy.data.objects.get(candidate[TAG_MARKER])
-    return None
+def is_active():
+    return bool(_S.get("active"))
+
+
+def _here():
+    area = bpy.context.area
+    return is_active() and area is not None and area.as_pointer() == _S.get("area")
 
 
 def _on_view():
-    settings = getattr(bpy.context.scene, "srp_marker", None)
-    if settings is None or not settings.overlay:
+    if not _here():
         return
-    ref = _active_ref()
-    if ref is None or not markers_of(ref):
+    ref = bpy.data.objects.get(_S["ref"])
+    if ref is None:
         return
+    settings = bpy.context.scene.srp_marker
     plan = frames(ref, settings.mirror)
     bones, xs, zs = [], [], []
-    size = max((max(p[0].z, p[1].z) for p in plan.values()), default=1.0)
+    high = max((max(p[0].z, p[1].z) for p in plan.values()), default=1.0)
     low = min((min(p[0].z, p[1].z) for p in plan.values()), default=0.0)
-    size = max(size - low, 0.1) * AXIS_RATIO
-    selected = {n for o in bpy.context.selected_objects if o.get(TAG_MARKER)
-                for n in bones_at(o)}
+    size = max(high - low, 0.1) * AXIS_RATIO
+    chosen = bpy.data.objects.get(_S.get("selected") or "")
+    wanted = set()
+    if chosen is not None:      # hien truc ca chuoi de thay cac dot co cung truc gap khong
+        wanted = set(bones_at(chosen)) | {b.name for b in chain_bones(ref, chosen)}
     for name, (head, tail, z) in plan.items():
         bones += [head, tail]
-        if z is None or (settings.axes_selected and name not in selected):
+        if z is None or (not settings.show_all_axes and name not in wanted):
             continue
         d = tail - head
         length = min(size, d.length * 0.45)     # ngon tay ngan, truc khong de len nhau
@@ -563,10 +883,11 @@ def _on_view():
     shader = gpu.shader.from_builtin('UNIFORM_COLOR')
     gpu.state.depth_test_set('NONE')
     gpu.state.blend_set('ALPHA')
-    gpu.state.line_width_set(2.0)
-    for points, color in ((bones, (1.0, 0.75, 0.2, 0.85)), (xs, (1.0, 0.2, 0.2, 1.0)),
-                          (zs, (0.25, 0.5, 1.0, 1.0))):
+    for points, color, width in ((bones, (1.0, 0.75, 0.2, 0.75), 1.5),
+                                 (xs, (1.0, 0.2, 0.2, 1.0), 3.0),
+                                 (zs, (0.25, 0.5, 1.0, 1.0), 3.0)):
         if points:
+            gpu.state.line_width_set(width)
             batch = batch_for_shader(shader, 'LINES', {"pos": points})
             shader.bind()
             shader.uniform_float("color", color)
@@ -575,52 +896,111 @@ def _on_view():
     gpu.state.blend_set('NONE')
 
 
+def _disc(tris, x, y, r, steps=14):
+    for i in range(steps):
+        a, b = 2 * math.pi * i / steps, 2 * math.pi * (i + 1) / steps
+        tris += [(x, y), (x + r * math.cos(a), y + r * math.sin(a)),
+                 (x + r * math.cos(b), y + r * math.sin(b))]
+
+
 def _on_text():
-    if not _place_state.get("active"):
+    if not _here():
         return
+    context = bpy.context
+    ref = bpy.data.objects.get(_S["ref"])
+    region, rv3d = context.region, context.region_data
+    if ref is None or rv3d is None:
+        return
+    scale = context.preferences.system.ui_scale
+    guide = {g["marker"] for g in _S["guide"]}
+    target = _S.get("selected")
+    layers = {k: [] for k in ("rest", "key", "done", "halo", "now", "pick")}
+    tag = None
+    for marker in markers_of(ref):
+        c = view3d_utils.location_3d_to_region_2d(region, rv3d, marker.location)
+        if c is None:
+            continue
+        name = marker.name
+        if name == (_S.get("hover") or _S.get("selected")):
+            tag = (c.x + 12 * scale, c.y + 8 * scale, name[3:])
+        if name == target:
+            _disc(layers["halo"], c.x, c.y, 11 * scale)
+            _disc(layers["now"], c.x, c.y, 6 * scale)
+        elif name == _S.get("hover"):
+            _disc(layers["pick"], c.x, c.y, 7 * scale)
+        elif marker.get(TAG_PLACED):
+            _disc(layers["done"], c.x, c.y, 4.5 * scale)
+        elif name in guide or marker.get(TAG_TWIN) in guide:
+            _disc(layers["key"], c.x, c.y, 4 * scale)
+        else:
+            _disc(layers["rest"], c.x, c.y, 2.5 * scale)
+    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+    gpu.state.blend_set('ALPHA')
+    for layer, color in (("rest", (0.75, 0.75, 0.75, 0.55)), ("key", (0.95, 0.95, 0.95, 0.9)),
+                         ("done", (0.3, 0.9, 0.4, 1.0)), ("halo", (1.0, 0.55, 0.1, 0.35)),
+                         ("now", (1.0, 0.55, 0.1, 1.0)), ("pick", (0.3, 0.85, 1.0, 1.0))):
+        if layers[layer]:
+            batch = batch_for_shader(shader, 'TRIS', {"pos": layers[layer]})
+            shader.bind()
+            shader.uniform_float("color", color)
+            batch.draw(shader)
+    gpu.state.blend_set('NONE')
+
     font = 0
-    # Goc duoi: goc tren da co chu cua viewport va thanh cong cu.
-    x, y = 70, 74
-    blf.size(font, 20)
-    blf.color(font, 1.0, 0.85, 0.3, 1.0)
+    if tag is not None:
+        blf.size(font, 12 * scale)
+        blf.color(font, 0.55, 0.92, 1.0, 1.0)
+        blf.position(font, tag[0], tag[1], 0)
+        blf.draw(font, tag[2])
+    x, y = 70 * scale, 76 * scale
+    blf.size(font, 22 * scale)
+    blf.color(font, 1.0, 0.8, 0.3, 1.0)
     blf.position(font, x, y, 0)
-    blf.draw(font, _place_state.get("title", ""))
-    blf.size(font, 13)
-    blf.color(font, 0.9, 0.9, 0.9, 1.0)
-    blf.position(font, x, y - 24, 0)
-    blf.draw(font, "Chuột trái: đặt   Shift+trái: đặt trên da   Space: giữ, sang khớp sau")
-    blf.position(font, x, y - 44, 0)
-    blf.draw(font, "Backspace: lùi   Tab: sang bộ phận sau   Enter/Esc: xong")
+    blf.draw(font, _prompt())
+    blf.size(font, 13 * scale)
+    blf.color(font, 0.92, 0.92, 0.92, 1.0)
+    blf.position(font, x, y - 28 * scale, 0)
+    blf.draw(font, "Click: chọn khớp    Giữ và kéo: dời    Ctrl+click: đưa khớp đang chọn tới đó"
+                   "    Chuột phải: lùi    Enter: xong    Esc: tạm dừng")
+
+
+def _label(name):
+    """Ten de doc cua khop: tu danh sach khop chinh (ca khi chon ben doi xung)."""
+    marker = bpy.data.objects.get(name or "")
+    if marker is None:
+        return ""
+    keys = {name, marker.get(TAG_TWIN)}
+    for item in _S.get("guide", ()):
+        if item["marker"] in keys:
+            return item["label"]
+    return name[3:]
+
+
+def _prompt():
+    chosen = _S.get("selected")
+    if not chosen:
+        return "Click vào một khớp để chọn"
+    return "%s: kéo để dời, Ctrl+click để đưa tới chỗ khác" % _label(chosen)
 
 
 @persistent
-def _on_depsgraph(scene, _depsgraph=None):
-    """Keo marker mot ben thi ben kia di theo."""
-    settings = getattr(scene, "srp_marker", None)
-    if settings is None or not settings.mirror or _place_state.get("active"):
-        return
-    try:
-        chosen = [o for o in bpy.context.selected_objects if o.get(TAG_MARKER)]
-    except AttributeError:
-        return
-    for marker in chosen:
-        ref = bpy.data.objects.get(marker[TAG_MARKER])
-        if ref is not None:
-            mirror_from(ref, marker)
+def _on_load(_scene=None, _depsgraph=None):
+    _S.clear()
+    _S["active"] = False
 
 
 # -------------------------------------------------------------- operators
 
 class SRP_OT_marker_start(bpy.types.Operator):
-    "Tạo marker cho mọi khớp. Bộ ref còn trống thì dựng khung theo kiểu chân và số ngón đang chọn"
+    "Tạo marker cho mọi khớp rồi vào chế độ đặt"
     bl_idname = "srp.marker_start"
-    bl_label = "Tạo marker"
+    bl_label = "Bắt đầu đặt marker"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
         settings = getattr(context.scene, "srp_generate", None)
-        return settings is not None and settings.target_mesh is not None
+        return settings is not None and settings.target_mesh is not None and not is_active()
 
     def execute(self, context):
         generate = context.scene.srp_generate
@@ -632,9 +1012,9 @@ class SRP_OT_marker_start(bpy.types.Operator):
         ref.hide_set(False)
         build_template(context, ref, mesh, context.scene.srp_ref,
                        context.scene.srp_marker.with_face)
-        found = sync_markers(context, ref, mesh)
-        ref.hide_set(True)
-        self.report({'INFO'}, "%d marker. Bấm 'Đặt lần lượt' để click từng khớp" % len(found))
+        sync_markers(context, ref, mesh)
+        if context.area is not None and context.area.type == 'VIEW_3D':
+            bpy.ops.srp.marker_mode('INVOKE_DEFAULT')
         return {'FINISHED'}
 
 
@@ -646,7 +1026,7 @@ class SRP_OT_marker_chain(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return refrig.find_ref(context) is not None
+        return refrig.find_ref(context) is not None and not is_active()
 
     def execute(self, context):
         ref = refrig.find_ref(context)
@@ -659,6 +1039,7 @@ class SRP_OT_marker_chain(bpy.types.Operator):
             return {'CANCELLED'}
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
+        was_hidden = ref.hide_get()
         ref.hide_set(False)         # bo ref an thi khong vao Edit Mode duoc
         made = []
         for side in (('L', 'R') if s.chain_pair else (None,)):
@@ -667,146 +1048,375 @@ class SRP_OT_marker_chain(bpy.types.Operator):
                                     chain_count=s.chain_count)
             made.append(names[0])
         sync_markers(context, ref, mesh)
-        ref.hide_set(True)
-        self.report({'INFO'}, "Đã thêm %s, %d đốt" % (", ".join(made), s.chain_count))
+        ref.hide_set(was_hidden)
+        self.report({'INFO'}, "Đã thêm %s, %d đốt. Bấm Tiếp tục đặt"
+                    % (", ".join(made), s.chain_count))
         return {'FINISHED'}
 
 
-class SRP_OT_marker_place(bpy.types.Operator):
-    "Click lần lượt từng khớp trên model. Marker tự nằm giữa khối thịt"
-    bl_idname = "srp.marker_place"
-    bl_label = "Đặt lần lượt"
-    bl_options = {'REGISTER', 'UNDO'}
+class SRP_OT_marker_cmd(bpy.types.Operator):
+    "Lệnh trong lúc đặt marker"
+    bl_idname = "srp.marker_cmd"
+    bl_label = "Lệnh marker"
 
-    only_unplaced: BoolProperty(name="Bỏ qua khớp đã đặt", default=True)
+    cmd: StringProperty()
+    index: IntProperty(default=0)
+
+    @classmethod
+    def description(cls, _context, props):
+        return {"BACK": "Lùi một bước",
+                "DONE": "Ghi vào bộ ref và thoát", "PAUSE": "Thoát, giữ marker để đặt tiếp",
+                "STAGE": "Mở hoặc đóng danh sách khớp của bộ phận này",
+                "SELECT": "Chọn khớp này",
+                "CENTER": "Đưa mọi đốt của chuỗi vào giữa khối thịt, giữ nguyên độ dài dọc xương",
+                "HINGE": "Đặt trục X của cả chuỗi trùng trục gập, suy từ độ cong của các đốt"
+                }.get(props.cmd, "")
+
+    @classmethod
+    def poll(cls, _context):
+        return is_active()
+
+    def execute(self, _context):
+        _S["req"] = (self.cmd, self.index)
+        return {'FINISHED'}
+
+
+class SRP_OT_marker_mode(bpy.types.Operator):
+    "Vào chế độ đặt marker. Trong lúc này viewport chỉ nhận marker, không chọn nhầm object khác"
+    bl_idname = "srp.marker_mode"
+    bl_label = "Đặt marker"
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
         return context.area is not None and context.area.type == 'VIEW_3D' \
-            and bool(markers_of(refrig.find_ref(context)))
+            and not is_active() and bool(markers_of(refrig.find_ref(context)))
 
-    def _title(self):
-        if self.index >= len(self.queue):
-            return "Xong"
-        name = self.queue[self.index]
-        return "%d/%d  %s" % (self.index + 1, len(self.queue), name[3:])
-
-    def _focus(self, context):
-        _place_state["title"] = self._title()
-        for obj in list(context.selected_objects):
-            obj.select_set(False)
-        if self.index < len(self.queue):
-            marker = bpy.data.objects[self.queue[self.index]]
-            marker.select_set(True)
-            context.view_layer.objects.active = marker
-        context.area.tag_redraw()
-
-    def _finish(self, context):
-        _place_state["active"] = False
-        context.area.tag_redraw()
-        return {'FINISHED'}
+    # ------------------------------------------------ vao / ra
 
     def invoke(self, context, _event):
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
-        self.ref = refrig.find_ref(context)
+        ref = refrig.find_ref(context)
         settings = context.scene.srp_marker
+        self.ref_name = ref.name
         self.mirror = settings.mirror
-        self.queue = queue_of(self.ref, self.mirror)
-        first = next((i for i, n in enumerate(self.queue)
-                      if not bpy.data.objects[n].get(TAG_PLACED)), None)
-        self.index = first if (first is not None and self.only_unplaced) else 0
-        mesh = context.scene.srp_generate.target_mesh
-        self.tree = mesh_tree(context, mesh) if mesh is not None else None
+        self.area = context.area
         self.history = []
-        _place_state["active"] = True
-        self._focus(context)
+        self.drag = None
+        mesh = context.scene.srp_generate.target_mesh
+        # File luu tu ban cu: gop khop goc ngon, an empty, dung lai cay khop.
+        # Vi tri marker da co giu nguyen.
+        sync_markers(context, ref, mesh)
+        self.tree = mesh_tree(context, mesh) if mesh is not None else None
+        ref.hide_set(True)          # xuong ref nam chong len marker, che mat khop
+        self._deselect(context)
+        guide = guide_of(ref, self.mirror)
+        _S.clear()
+        _S.update(active=True, area=context.area.as_pointer(), ref=ref.name, guide=guide,
+                  selected=None, hover=None, req=None, open_stage=None)
+        self.timer = context.window_manager.event_timer_add(0.15, window=context.window)
         context.window_manager.modal_handler_add(self)
+        context.window.cursor_modal_set('CROSSHAIR')
+        self._redraw()
         return {'RUNNING_MODAL'}
 
-    def _view(self, context, event):
-        region = next((r for r in context.area.regions if r.type == 'WINDOW'), None)
-        if region is None:
-            return None
-        x, y = event.mouse_x - region.x, event.mouse_y - region.y
-        if not (0 <= x < region.width and 0 <= y < region.height):
-            return None
-        rv3d = context.area.spaces.active.region_3d
-        coord = (x, y)
-        return (region, rv3d, coord,
-                view3d_utils.region_2d_to_origin_3d(region, rv3d, coord),
-                view3d_utils.region_2d_to_vector_3d(region, rv3d, coord))
+    def _leave(self, context):
+        _S["active"] = False
+        context.window_manager.event_timer_remove(self.timer)
+        context.window.cursor_modal_restore()
+        ref = bpy.data.objects.get(self.ref_name)
+        if ref is not None:
+            ref.hide_set(False)
+            self._deselect(context)
+            ref.select_set(True)
+            context.view_layer.objects.active = ref
+        self._redraw()
+
+    def cancel(self, context):
+        self._leave(context)
+
+    def _finish(self, context):
+        ref = bpy.data.objects[self.ref_name]
+        if self.mirror:
+            mirror_all(ref)
+        bad = zero_bones(ref)
+        if bad:
+            self.report({'ERROR'}, "Hai đầu xương trùng nhau: %s" % ", ".join(bad[:5]))
+            return {'RUNNING_MODAL'}
+        count = apply_markers(context, ref, self.mirror)
+        self._leave(context)
+        self.report({'INFO'}, "Đã ghi %d xương vào bộ ref. Bấm Dựng rig + widget" % count)
+        return {'FINISHED'}
+
+    def _pause(self, context):
+        self._leave(context)
+        self.report({'INFO'}, "Tạm dừng. Marker vẫn giữ, bấm Tiếp tục đặt")
+        return {'FINISHED'}
+
+    # ------------------------------------------------ tien ich
+
+    def _redraw(self):
+        if self.area is not None:
+            self.area.tag_redraw()
+
+    @staticmethod
+    def _deselect(context):
+        for obj in list(context.view_layer.objects.selected):
+            obj.select_set(False)
+
+    def _regions(self):
+        return {r.type: r for r in self.area.regions}
+
+    @staticmethod
+    def _inside(region, event):
+        return region is not None and region.width > 1 and region.height > 1 \
+            and region.x <= event.mouse_x < region.x + region.width \
+            and region.y <= event.mouse_y < region.y + region.height
+
+    def _over_nav_gizmo(self, context, event, regions):
+        """Cum gizmo xoay / zoom goc tren ben phai viewport."""
+        view = regions.get('WINDOW')
+        if view is None:
+            return False
+        scale = context.preferences.system.ui_scale
+        panel = regions.get('UI')
+        right = view.x + view.width
+        if panel is not None and panel.width > 1:
+            right = min(right, panel.x)
+        return right - 125 * scale <= event.mouse_x < right \
+            and view.y + view.height - 250 * scale <= event.mouse_y
+
+    def _xy(self, region, event):
+        return event.mouse_x - region.x, event.mouse_y - region.y
+
+    def _pick(self, context, region, xy):
+        """Marker gan chuot nhat."""
+        ref = bpy.data.objects[self.ref_name]
+        rv3d = self.area.spaces.active.region_3d
+        limit = PICK_PX * context.preferences.system.ui_scale
+        best, best_d = None, limit
+        # Bat duoc MOI khop, ke ca dot giua tu noi suy.
+        for marker in markers_of(ref):
+            c = view3d_utils.location_3d_to_region_2d(region, rv3d, marker.location)
+            if c is None:
+                continue
+            d = math.hypot(c.x - xy[0], c.y - xy[1])
+            if d < best_d:
+                best, best_d = marker.name, d
+        return best
 
     def _snapshot(self):
-        return (self.index, {m.name: (m.location.copy(), bool(m.get(TAG_PLACED)))
-                             for m in markers_of(self.ref)})
+        ref = bpy.data.objects[self.ref_name]
+        return (_S.get("selected"), {m.name: (m.location.copy(), bool(m.get(TAG_PLACED)))
+                                     for m in markers_of(ref)})
 
-    def _next_part(self):
-        def part(marker_name):
-            bone = self.ref.data.bones[ends_of(bpy.data.objects[marker_name])[0][0]]
-            return refrig.part_of(bone)
-        now = part(self.queue[self.index])
-        i = self.index + 1
-        while i < len(self.queue) and part(self.queue[i]) == now:
-            i += 1
-        return i
+    def _restore(self, saved):
+        _S["selected"], rows = saved
+        for name, (loc, placed) in rows.items():
+            marker = bpy.data.objects.get(name)
+            if marker is not None:
+                marker.location = loc
+                marker[TAG_PLACED] = placed
+
+    def _back(self):
+        if self.history:
+            self._restore(self.history.pop())
+
+    def _command(self, context, cmd, index):
+        if cmd == 'BACK':
+            self._back()
+        elif cmd == 'STAGE':
+            stage = STAGES[index]
+            _S["open_stage"] = None if _S.get("open_stage") == stage else stage
+        elif cmd == 'SELECT':
+            if 0 <= index < len(_S["guide"]):
+                _S["selected"] = _S["guide"][index]["marker"]
+        elif cmd in {'CENTER', 'HINGE'}:
+            chosen = bpy.data.objects.get(_S.get("selected") or "")
+            ref = bpy.data.objects[self.ref_name]
+            if chosen is not None and cmd == 'CENTER' and self.tree is not None:
+                self.history.append(self._snapshot())
+                count = center_chain(ref, self.tree, chosen, self.mirror)
+                if count:
+                    self.report({'INFO'}, "Đã căn %d khớp vào giữa khối thịt" % count)
+                else:
+                    self.history.pop()
+                    self.report({'WARNING'}, "Các đốt còn nằm xa bộ phận này. "
+                                             "Kéo chúng vào gần rồi căn lại")
+            elif chosen is not None and cmd == 'HINGE':
+                count, why = hinge_chain(ref, chosen, self.mirror)
+                self.report({'WARNING'} if why else {'INFO'},
+                            why or "Đã đặt trục gập cho %d xương" % count)
+        elif cmd == 'DONE':
+            return self._finish(context)
+        elif cmd == 'PAUSE':
+            return self._pause(context)
+        self._redraw()
+        return None
+
+    def _click_point(self, region, xy, event, marker):
+        rv3d = self.area.spaces.active.region_3d
+        origin = view3d_utils.region_2d_to_origin_3d(region, rv3d, xy)
+        direction = view3d_utils.region_2d_to_vector_3d(region, rv3d, xy)
+        point = None
+        if self.tree is not None:
+            # Chuoi phu kien (toc, ao) nam tren da; khop co the nam giua thit.
+            surface = event.shift or marker_is_chain(marker)
+            if surface:
+                point = self.tree.ray_cast(origin, direction)[0]
+            else:
+                point = center_hit(self.tree, origin, direction)
+        if point is None:           # ngoai model: giu do sau hien tai
+            point = view3d_utils.region_2d_to_location_3d(region, rv3d, xy, marker.location)
+        return point
+
+    # ------------------------------------------------ vong su kien
 
     def modal(self, context, event):
-        if event.type in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE'} \
-                or (event.type.startswith('NUMPAD') and event.type != 'NUMPAD_ENTER') \
-                or event.type == 'MOUSEMOVE':
+        if not is_active():
+            return {'CANCELLED'}
+        # Moi nhip: khong de object nao duoc chon, ke ca qua duong khong luong truoc.
+        if context.view_layer.objects.selected:
+            self._deselect(context)
+
+        settings = context.scene.srp_marker
+        if settings.mirror != self.mirror:
+            self.mirror = settings.mirror
+            if self.mirror:
+                mirror_all(bpy.data.objects[self.ref_name])
+            _S["guide"] = guide_of(bpy.data.objects[self.ref_name], self.mirror)
+            self._redraw()
+
+        request = _S.get("req")
+        if request:
+            _S["req"] = None
+            result = self._command(context, *request)
+            if result is not None and result != {'RUNNING_MODAL'}:
+                return result
+        if event.type == 'TIMER':
             return {'PASS_THROUGH'}
-        if event.value != 'PRESS':
-            return {'RUNNING_MODAL'} if event.type == 'LEFTMOUSE' else {'PASS_THROUGH'}
-        if event.type in {'ESC', 'RET', 'NUMPAD_ENTER', 'RIGHTMOUSE'}:
-            return self._finish(context)
-        if event.type == 'BACK_SPACE':
-            if self.history:
-                self.index, saved = self.history.pop()
-                for name, (loc, placed) in saved.items():
-                    marker = bpy.data.objects[name]
-                    marker.location, marker[TAG_PLACED] = loc, placed
-                self._focus(context)
+
+        regions = self._regions()
+        kind, value = event.type, event.value
+
+        if self.drag is not None:
+            return self._on_drag(context, event, regions)
+
+        # Dieu huong viewport luon di qua
+        if kind in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN',
+                    'TRACKPADZOOM', 'MOUSEROTATE', 'MOUSESMARTZOOM', 'HOME'} \
+                or (kind.startswith('NUMPAD') and kind != 'NUMPAD_ENTER'):
+            return {'PASS_THROUGH'}
+        inputs = context.preferences.inputs
+        if kind == 'LEFTMOUSE' and event.alt and inputs.use_mouse_emulate_3_button:
+            return {'PASS_THROUGH'}
+        if kind == 'S' and event.ctrl:      # Ctrl+S
+            return {'PASS_THROUGH'}
+
+        # Panel ben phai cua chinh viewport nay: bam nut, keo thanh roll
+        if self._inside(regions.get('UI'), event):
+            if _S.get("hover"):
+                _S["hover"] = None
+                self._redraw()
+            return {'PASS_THROUGH'}
+
+        view = regions.get('WINDOW')
+        over_view = self._inside(view, event) \
+            and not self._inside(regions.get('TOOLS'), event) \
+            and not self._inside(regions.get('HEADER'), event) \
+            and not self._inside(regions.get('TOOL_HEADER'), event)
+
+        if kind == 'MOUSEMOVE':
+            hover = self._pick(context, view, self._xy(view, event)) if over_view else None
+            if hover != _S.get("hover"):
+                _S["hover"] = hover
+                context.window.cursor_modal_set('HAND' if hover else 'CROSSHAIR')
+                self._redraw()
+            return {'PASS_THROUGH'} if over_view else {'RUNNING_MODAL'}
+
+        if value == 'PRESS':
+            if kind in {'RET', 'NUMPAD_ENTER'}:
+                result = self._finish(context)
+                return result
+            if kind == 'ESC':
+                return self._pause(context)
+            if kind == 'RIGHTMOUSE' or (kind == 'Z' and event.ctrl):
+                if over_view or kind == 'Z':
+                    self._back()
+                    self._redraw()
+                return {'RUNNING_MODAL'}
+            if kind == 'LEFTMOUSE' and over_view:
+                if self._over_nav_gizmo(context, event, regions):
+                    return {'PASS_THROUGH'}
+                self._press(context, event, view)
+                return {'RUNNING_MODAL'}
+        return {'RUNNING_MODAL'}    # moi thu khac bi nuot: khong chon, khong doi gi
+
+    def _press(self, context, event, view):
+        xy = self._xy(view, event)
+        chosen = bpy.data.objects.get(_S.get("selected") or "")
+        # Ctrl truoc: dich toi sat marker khac van la dich, khong bi hieu la chon.
+        if event.ctrl:
+            if chosen is not None:
+                ref = bpy.data.objects[self.ref_name]
+                self.history.append(self._snapshot())
+                place(ref, chosen, self._click_point(view, xy, event, chosen), self.mirror)
+                self._redraw()
+            return
+        hit = self._pick(context, view, xy)
+        if hit is not None:
+            _S["selected"] = hit
+            self.drag = {"name": hit, "start": xy, "saved": self._snapshot(), "moved": False}
+            self._redraw()
+        # Click ra ngoai: khong lam gi. Bam truot marker khong duoc lam khop nhay di
+        # hay mat khop dang chon.
+
+    def _on_drag(self, context, event, regions):
+        drag, kind = self.drag, event.type
+        ref = bpy.data.objects[self.ref_name]
+        if kind in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+            self._restore(drag["saved"])
+            self.drag = None
+            self._redraw()
             return {'RUNNING_MODAL'}
-        if event.type in {'SPACE', 'TAB'}:
-            self.history.append(self._snapshot())
-            self.index = self.index + 1 if event.type == 'SPACE' else self._next_part()
-        elif event.type == 'LEFTMOUSE':
-            view = self._view(context, event)
-            if view is None:
-                return {'PASS_THROUGH'}
-            region, rv3d, coord, origin, direction = view
-            marker = bpy.data.objects[self.queue[self.index]]
-            point = None
-            if self.tree is not None:
-                if event.shift:
-                    point = self.tree.ray_cast(origin, direction)[0]
-                else:
-                    point = center_hit(self.tree, origin, direction)
-            if point is None:       # ngoai model: giu do sau hien tai
-                point = view3d_utils.region_2d_to_location_3d(region, rv3d, coord,
-                                                              marker.location)
-            self.history.append(self._snapshot())
-            place(self.ref, marker, point, self.mirror)
-            self.index += 1
-        else:
-            return {'PASS_THROUGH'}
-        if self.index >= len(self.queue):
-            self._focus(context)
-            return self._finish(context)
-        self._focus(context)
+        if kind == 'LEFTMOUSE' and event.value == 'RELEASE':
+            self.drag = None
+            if drag["moved"]:
+                self.history.append(drag["saved"])
+            self._redraw()
+            return {'RUNNING_MODAL'}
+        if kind == 'MOUSEMOVE':
+            view = regions['WINDOW']
+            xy = self._xy(view, event)
+            if not drag["moved"] and math.hypot(xy[0] - drag["start"][0],
+                                                xy[1] - drag["start"][1]) < DRAG_PX:
+                return {'RUNNING_MODAL'}
+            drag["moved"] = True
+            marker = bpy.data.objects[drag["name"]]
+            rv3d = self.area.spaces.active.region_3d
+            point = view3d_utils.region_2d_to_location_3d(view, rv3d, xy, marker.location)
+            place(ref, marker, point, self.mirror, auto_side=False)
+            self._redraw()
         return {'RUNNING_MODAL'}
+
+
+def marker_is_chain(marker):
+    ref = bpy.data.objects.get(marker.get(TAG_MARKER, ""))
+    if ref is None:
+        return False
+    return any(ref.data.bones[n].get(refrig.TAG_PART) == 'CHAIN' for n, _e in ends_of(marker))
 
 
 class SRP_OT_marker_apply(bpy.types.Operator):
     "Ghi vị trí và roll từ marker vào bộ ref"
     bl_idname = "srp.marker_apply"
-    bl_label = "Áp dụng vào bộ ref"
+    bl_label = "Ghi vào bộ ref"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return bool(markers_of(refrig.find_ref(context)))
+        return not is_active() and bool(markers_of(refrig.find_ref(context)))
 
     def execute(self, context):
         ref = refrig.find_ref(context)
@@ -823,24 +1433,27 @@ class SRP_OT_marker_apply(bpy.types.Operator):
 
 
 class SRP_OT_marker_roll(bpy.types.Operator):
-    "Đổi roll của các xương bắt đầu tại marker đang chọn"
+    "Đổi roll của xương tại marker đang chọn"
     bl_idname = "srp.marker_roll"
     bl_label = "Đổi roll"
-    bl_options = {'REGISTER', 'UNDO'}
 
     delta: FloatProperty(default=90.0)
     reset: BoolProperty(default=False)
 
     @classmethod
-    def poll(cls, context):
-        obj = context.active_object
-        return obj is not None and bool(obj.get(TAG_MARKER))
+    def poll(cls, _context):
+        return is_active() and bool(_S.get("selected"))
 
     def execute(self, context):
-        marker = context.active_object
+        marker = bpy.data.objects.get(_S["selected"])
+        if marker is None:
+            return {'CANCELLED'}
         ref = bpy.data.objects.get(marker[TAG_MARKER])
-        mirror = context.scene.srp_marker.mirror
-        for name in bones_at(marker):
+        settings = context.scene.srp_marker
+        mirror = settings.mirror
+        names = [b.name for b in chain_bones(ref, marker)] if settings.roll_chain \
+            else bones_at(marker)
+        for name in names:
             side, other = _pair_side(name)
             # Doi xung: ben R doc gia tri tu ben L, nen phai sua ben L, nguoc dau
             sign = 1.0
@@ -861,7 +1474,7 @@ class SRP_OT_marker_clear(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return bool(markers_of(refrig.find_ref(context)))
+        return not is_active() and bool(markers_of(refrig.find_ref(context)))
 
     def invoke(self, context, event):
         return context.window_manager.invoke_confirm(self, event)
@@ -876,11 +1489,11 @@ class SRP_OT_marker_clear(bpy.types.Operator):
 
 class SRP_MarkerSettings(bpy.types.PropertyGroup):
     mirror: BoolProperty(name="Đối xứng", default=True,
-                         description="Đặt một bên, bên kia đi theo")
-    overlay: BoolProperty(name="Hiện xương + trục", default=True,
-                          description="Đỏ = X (trục gập), xanh = Z")
-    axes_selected: BoolProperty(name="Chỉ trục khớp đang chọn", default=True,
-                                description="Tắt để xem trục của mọi xương")
+                         description="Đặt một bên, bên kia đi theo. Click bên nào cũng được")
+    show_all_axes: BoolProperty(name="Hiện trục mọi xương", default=False,
+                                description="Tắt: chỉ hiện trục của chuỗi đang chọn")
+    roll_chain: BoolProperty(name="Xoay cả chuỗi", default=True,
+                             description="Nút xoay áp dụng cho mọi đốt của chuỗi đang chọn")
     with_face: BoolProperty(name="Kèm marker mặt", default=False,
                             description="Thêm đủ hàm, răng, lưỡi, môi, mắt, mí, mày, tai")
     chain_name: StringProperty(name="Tên", default="Hair")
@@ -890,6 +1503,7 @@ class SRP_MarkerSettings(bpy.types.PropertyGroup):
 
 
 def draw_panel(layout, context):
+    """Ngoai che do dat: chuan bi, hoac tiep tuc."""
     settings = context.scene.srp_marker
     refs = context.scene.srp_ref
     ref = refrig.find_ref(context)
@@ -902,48 +1516,99 @@ def draw_panel(layout, context):
         row.prop(refs, "thumb", toggle=True)
         col.prop(settings, "with_face")
         big = layout.column()
-        big.scale_y = 1.4
+        big.scale_y = 1.5
         big.operator("srp.marker_start", icon='EMPTY_AXIS')
         return
 
-    placed = sum(1 for m in found if m.get(TAG_PLACED))
-    layout.label(text="%d/%d khớp đã đặt" % (placed, len(found)), icon='EMPTY_AXIS')
+    guide = guide_of(ref, settings.mirror)
+    done = sum(1 for g in guide if bpy.data.objects[g["marker"]].get(TAG_PLACED))
+    layout.label(text="Đã đặt %d/%d khớp chính" % (done, len(guide)), icon='EMPTY_AXIS')
     big = layout.column()
-    big.scale_y = 1.4
-    big.operator("srp.marker_place", icon='RESTRICT_SELECT_OFF')
-    row = layout.row(align=True)
-    row.prop(settings, "mirror", toggle=True, icon='MOD_MIRROR')
-    row.prop(settings, "overlay", toggle=True, icon='OVERLAY')
-
-    active = context.active_object
-    if active is not None and active.get(TAG_MARKER) == ref.name:
-        box = layout.box()
-        box.label(text="Roll · " + active.name[3:], icon='ORIENTATION_GIMBAL')
-        for name in bones_at(active):
-            bone = ref.data.bones[name]
-            side, other = _pair_side(name)
-            if settings.mirror and side == 'R' and other in ref.data.bones:
-                bone = ref.data.bones[other]
-            box.prop(bone, '["%s"]' % TAG_ROLL, text=bone.name)
-        row = box.row(align=True)
-        row.operator("srp.marker_roll", text="-90").delta = -90.0
-        row.operator("srp.marker_roll", text="+90").delta = 90.0
-        row.operator("srp.marker_roll", text="Tự động").reset = True
-        box.prop(settings, "axes_selected")
+    big.scale_y = 1.5
+    big.operator("srp.marker_mode", text="Mở chỉnh marker", icon='RESTRICT_SELECT_OFF')
 
     box = layout.box()
-    box.label(text="Tai, tóc, đuôi, quần áo", icon='OUTLINER_OB_CURVES')
+    box.label(text="Thêm tai, tóc, đuôi, quần áo", icon='OUTLINER_OB_CURVES')
     row = box.row(align=True)
     row.prop(settings, "chain_name", text="")
     row.prop(settings, "chain_count", text="")
     row.prop(settings, "chain_pair", toggle=True)
     box.prop_search(settings, "chain_socket", ref.data, "bones", icon='BONE_DATA')
     box.operator("srp.marker_chain", icon='ADD')
+    layout.operator("srp.marker_clear", icon='X')
+
+
+def draw_mode(layout, context):
+    """Trong che do dat: chi con nhung gi can de dat xong."""
+    settings = context.scene.srp_marker
+    ref = bpy.data.objects.get(_S.get("ref", ""))
+    if ref is None:
+        return
+    guide = _S["guide"]
+    chosen = bpy.data.objects.get(_S.get("selected") or "")
+    same = {chosen.name, chosen.get(TAG_TWIN)} if chosen is not None else set()
+
+    box = layout.box()
+    box.scale_y = 1.2
+    box.label(text=_label(_S.get("selected")) or "Chưa chọn khớp",
+              icon='RESTRICT_SELECT_OFF')
+
+    col = layout.column(align=True)
+    for stage_index, stage in enumerate(STAGES):
+        rows = [i for i, g in enumerate(guide) if g["stage"] == stage]
+        if not rows:
+            continue
+        left = [i for i in rows if not bpy.data.objects[guide[i]["marker"]].get(TAG_PLACED)]
+        is_open = _S.get("open_stage") == stage
+        op = col.operator("srp.marker_cmd", depress=is_open,
+                          text="%s  %d/%d" % (stage, len(rows) - len(left), len(rows)),
+                          icon='DOWNARROW_HLT' if is_open else 'RIGHTARROW')
+        op.cmd, op.index = 'STAGE', stage_index
+        if is_open:
+            for i in rows:
+                item = guide[i]
+                placed = bpy.data.objects[item["marker"]].get(TAG_PLACED)
+                op = col.operator("srp.marker_cmd", text=item["label"],
+                                  depress=item["marker"] in same,
+                                  icon='CHECKMARK' if placed else 'RADIOBUT_OFF')
+                op.cmd, op.index = 'SELECT', i
 
     row = layout.row(align=True)
-    row.scale_y = 1.3
-    row.operator("srp.marker_apply", icon='CHECKMARK')
-    row.operator("srp.marker_clear", text="", icon='X')
+    row.operator("srp.marker_cmd", text="Lùi", icon='LOOP_BACK').cmd = 'BACK'
+    row.prop(settings, "mirror", toggle=True, icon='MOD_MIRROR')
+
+    if chosen is not None and chosen.get(TAG_MARKER) == ref.name:
+        chain = chain_bones(ref, chosen)
+        tune = layout.box()
+        tune.label(text=chosen.name[3:], icon='BONE_DATA')
+        col = tune.column(align=True)
+        col.scale_y = 1.2
+        col.operator("srp.marker_cmd", text="Căn cả chuỗi vào giữa thịt",
+                     icon='PIVOT_MEDIAN').cmd = 'CENTER'
+        col.operator("srp.marker_cmd", text="Trục gập theo chuỗi",
+                     icon='ORIENTATION_GIMBAL').cmd = 'HINGE'
+        tune.prop(settings, "roll_chain")
+        row = tune.row(align=True)
+        for step in (-15.0, -5.0, 5.0, 15.0):
+            row.operator("srp.marker_roll", text="%+d°" % step).delta = step
+        row = tune.row(align=True)
+        row.operator("srp.marker_roll", text="-90°").delta = -90.0
+        row.operator("srp.marker_roll", text="+90°").delta = 90.0
+        row.operator("srp.marker_roll", text="Tự động").reset = True
+        shown = chain if settings.roll_chain else [ref.data.bones[n] for n in bones_at(chosen)]
+        col = tune.column(align=True)
+        for item in shown:
+            bone = item
+            side, other = _pair_side(item.name)
+            if settings.mirror and side == 'R' and other in ref.data.bones:
+                bone = ref.data.bones[other]
+            col.prop(bone, '["%s"]' % TAG_ROLL, text=bone.name)
+        tune.prop(settings, "show_all_axes")
+
+    big = layout.row(align=True)
+    big.scale_y = 1.5
+    big.operator("srp.marker_cmd", text="Xong", icon='CHECKMARK').cmd = 'DONE'
+    big.operator("srp.marker_cmd", text="Tạm dừng", icon='PAUSE').cmd = 'PAUSE'
 
 
 def register_extra():
@@ -951,14 +1616,16 @@ def register_extra():
     bpy.types.Scene.srp_marker = bpy.props.PointerProperty(type=SRP_MarkerSettings)
     _draw_view = bpy.types.SpaceView3D.draw_handler_add(_on_view, (), 'WINDOW', 'POST_VIEW')
     _draw_text = bpy.types.SpaceView3D.draw_handler_add(_on_text, (), 'WINDOW', 'POST_PIXEL')
-    if _on_depsgraph not in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph)
+    if _on_load not in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.append(_on_load)
 
 
 def unregister_extra():
     global _draw_view, _draw_text
-    if _on_depsgraph in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(_on_depsgraph)
+    _S.clear()
+    _S["active"] = False
+    if _on_load in bpy.app.handlers.load_pre:
+        bpy.app.handlers.load_pre.remove(_on_load)
     for handle in (_draw_view, _draw_text):
         if handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW')
@@ -970,5 +1637,5 @@ def unregister_extra():
 
 
 CLASSES = (SRP_MarkerSettings, SRP_OT_marker_start, SRP_OT_marker_chain,
-           SRP_OT_marker_place, SRP_OT_marker_apply, SRP_OT_marker_roll,
-           SRP_OT_marker_clear)
+           SRP_OT_marker_cmd, SRP_OT_marker_mode, SRP_OT_marker_apply,
+           SRP_OT_marker_roll, SRP_OT_marker_clear)

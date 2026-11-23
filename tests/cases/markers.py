@@ -38,8 +38,12 @@ rep("khớp nối liền gộp một marker", len(ms) < 2 * len(ref.data.bones),
 M = {n: m for m in ms for n, e in MK.ends_of(m) if e == 'H'}
 rep("cổ tay và 4 xương bàn cùng một marker", all(M[n] == M["Hand_Master.L"] for n in ("Palm.L.001", "Palm.L.002", "Palm.L.003", "Palm.L.004")))
 rep("marker đôi nhận đúng cặp", M["Bicep.L"].get(MK.TAG_TWIN) == M["Bicep.R"].name and MK.is_center(M["Spine.001"]))
-q = MK.queue_of(ref)
+q = [g["marker"] for g in MK.guide_of(ref)]
 rep("thứ tự đặt: hông trước, không có bên phải", q[0] == M["Hips"].name and not any(".R" in n for n in q), q[0])
+rep("chỉ phải click khớp chính", len(q) == 22, "%d click cho %d khớp" % (len(q), len(ms)))
+E = MK.end_map(ref)
+rep("gốc ngón và đuôi xương bàn là một khớp", E[("Palm.L.003", 'T')] == E[("Index.L", 'H')])
+rep("marker không bấm trúng được ngoài chế độ đặt", all(not m.visible_get() for m in ms))
 
 # điểm giữa khối thịt
 tree = MK.mesh_tree(ctx, body)
@@ -59,7 +63,79 @@ twin = M["Hand_Master.R"].location
 rep("bên phải là ảnh gương", abs((twin.x - cx) + (M["Hand_Master.L"].location.x - cx)) < 1e-6 and abs(twin.z - 1.20) < 1e-6)
 MK.place(ref, M["Spine.001"], Vector((cx + 0.2, 0.0, 1.05)))
 rep("khớp giữa bị ghim vào trục đối xứng", abs(M["Spine.001"].location.x - cx) < 1e-6)
-MK.place(ref, M["Forearm.L"], Vector((cx + 0.28, 0.035, 1.33)))
+MK.place(ref, M["Forearm.L"], Vector((cx - 0.28, 0.035, 1.33)))
+rep("click nhầm bên vẫn về đúng bên", abs(M["Forearm.L"].location.x - (cx + 0.28)) < 1e-6 and abs(M["Forearm.R"].location.x - (cx - 0.28)) < 1e-6)
+MK.place(ref, M["Hips"], Vector((cx, 0.0, 0.9)))
+MK.place(ref, M["Neck"], Vector((cx, 0.01, 1.5)))
+zs = [M[n].location.z for n in ("Hips", "Spine.001", "Spine.002", "Spine.003", "Neck")]
+rep("đốt sống tự chia giữa Hông và Cổ", all(a < b for a, b in zip(zs, zs[1:])) or M["Spine.001"].get(MK.TAG_PLACED), str(["%.3f" % z for z in zs]))
+rep("đốt sống giữa chưa bị coi là đã đặt", not M["Spine.002"].get(MK.TAG_PLACED))
+MK.place(ref, M["Index.L"], M["Hand_Master.L"].location + Vector((0.09, -0.03, -0.05)))
+tip = E[("Index.L.002", 'T')]
+MK.place(ref, tip, M["Index.L"].location + Vector((0.08, -0.01, -0.06)))
+a, b, mid = M["Index.L"].location, tip.location, M["Index.L.001"].location
+rep("đốt ngón tự chia giữa gốc và đầu ngón", (mid - a).length + (b - mid).length < (b - a).length * 1.1 and 0.1 < (mid - a).length / (b - a).length < 0.7, "%.3f" % ((mid - a).length / (b - a).length))
+spine_before = M["Spine.002"].location.copy()
+placed_before = {m.name for m in MK.markers_of(ref) if m.get(MK.TAG_PLACED)}
+hand_before = M["Hand_Master.L"].location.copy()
+MK.place(ref, M["Shoulder.L"], Vector((cx + 0.03, 0.0, 1.42)))
+rep("đặt xương đòn không kéo cột sống", (M["Spine.002"].location - spine_before).length < 1e-6)
+rep("đặt xương đòn không xoá khớp đã đặt", placed_before <= {m.name for m in MK.markers_of(ref) if m.get(MK.TAG_PLACED)})
+rep("khớp đã đặt giữ nguyên vị trí", (M["Hand_Master.L"].location - hand_before).length < 1e-6)
+rep("hai bên vẫn là ảnh gương", abs((M["Hand_Master.R"].location.x - cx) + (hand_before.x - cx)) < 1e-6 and M["Shoulder.R"].get(MK.TAG_PLACED))
+# ngón nghiêng lạ: căn vào thịt và trục gập theo chính ngón
+root, mid1, mid2 = M["Thumb.L"], M["Thumb.L.001"], M["Thumb.L.002"]
+tip_t = E[("Thumb.L.002", 'T')]
+rep("chuỗi ngón cái đủ 3 đốt", [b.name for b in MK.chain_bones(ref, mid1)] == ["Thumb.L", "Thumb.L.001", "Thumb.L.002"])
+axis = Vector((0.62, -0.55, -0.56)).normalized()
+side_v = axis.cross(Vector((0.2, 0.9, 0.4))).normalized()
+base_p = M["Hand_Master.L"].location + Vector((0.03, -0.05, -0.02))
+want = [base_p, base_p + axis * 0.03 + side_v * 0.004, base_p + axis * 0.055 + side_v * 0.012, base_p + axis * 0.075 + side_v * 0.024]
+for m, p in zip((root, mid1, mid2, tip_t), want):
+    MK.place(ref, m, p, auto_side=False)
+rep("kéo được đốt giữa, không làm lệch gốc và đầu ngón", (mid1.location - want[1]).length < 1e-6 and (root.location - want[0]).length < 1e-6 and (tip_t.location - want[3]).length < 1e-6)
+n, why = MK.hinge_chain(ref, mid1)
+plan = MK.frames(ref)
+plane = (want[1] - want[0]).cross(want[2] - want[1]).normalized()
+off = 0.0
+for b in ("Thumb.L", "Thumb.L.001", "Thumb.L.002"):
+    h, t, z = plan[b]
+    off = max(off, math.degrees(math.asin(min(1.0, abs((t - h).normalized().cross(z).normalized().dot(plane))))) and abs(90 - math.degrees((t - h).normalized().cross(z).angle(plane))))
+rep("trục X trùng trục gập của ngón nghiêng", n == 3 and off > 85 or n == 3 and abs(off) > 85, "lệch %.2f°" % (90 - off))
+zr = plan["Thumb.R"][2]; zl = plan["Thumb.L"][2]
+rep("trục gập bên phải là ảnh gương", (Vector((-zl.x, zl.y, zl.z)) - zr).length < 1e-3)
+bpy.ops.mesh.primitive_cylinder_add(radius=0.012, depth=0.3, location=(2, 0, 1))
+cyl = ctx.object
+cyl.rotation_euler = axis.to_track_quat('Z', 'Y').to_euler()
+bpy.ops.object.transform_apply(rotation=True)
+tr = MK.mesh_tree(ctx, cyl)
+in_p = Vector((2, 0, 1)) + axis * 0.02 + side_v * 0.007
+c_p = MK.center_joint(tr, in_p, axis, 0.05)
+rep("căn đốt vào tâm ống nghiêng", (c_p - (Vector((2, 0, 1)) + axis * 0.02)).length < 5e-4, "%.3f mm" % ((c_p - (Vector((2, 0, 1)) + axis * 0.02)).length * 1000))
+out_p = Vector((2, 0, 1)) + axis * 0.02 + side_v * 0.016
+c_o = MK.center_joint(tr, out_p, axis, 0.05)
+rep("đốt nằm ngoài da cũng kéo về tâm", (c_o - (Vector((2, 0, 1)) + axis * 0.02)).length < 5e-4, "%.3f mm" % ((c_o - (Vector((2, 0, 1)) + axis * 0.02)).length * 1000))
+tube_c = Vector((2, 0, 1))
+on_axis = [tube_c + axis * t for t in (-0.06, -0.02, 0.02, 0.06)]
+wob = [side_v * 0.005, -side_v * 0.004, side_v * 0.006, -side_v * 0.003]
+for m, p, w in zip((root, mid1, mid2, tip_t), on_axis, wob):
+    m.location = p + w
+    m[MK.TAG_PLACED] = True
+cnt = MK.center_chain(ref, tr, mid1, mirror=False)
+err = max((m.location - tube_c).cross(axis).length for m in (root, mid1, mid2, tip_t))  # khoảng cách tới trục ống
+rep("căn cả ngón nghiêng vào tâm", cnt == 4 and err < 1e-3, "%d khớp, lệch %.3f mm" % (cnt, err * 1000))
+far = [tube_c + Vector((0.3, 0.2, 0)) + axis * t for t in (-0.06, -0.02, 0.02, 0.06)]
+for m, p in zip((root, mid1, mid2, tip_t), far):
+    m.location = p
+cnt = MK.center_chain(ref, tr, mid1, mirror=False)
+rep("chuỗi nằm xa thịt thì giữ nguyên, không bẻ gập", cnt == 0 and max((m.location - p).length for m, p in zip((root, mid1, mid2, tip_t), far)) < 1e-9, str(cnt))
+for m, p in zip((root, mid1, mid2, tip_t), want):
+    m.location = p
+MK.mirror_all(ref, 'L')
+bpy.data.objects.remove(cyl)
+ctx.view_layer.objects.active = body
+sh0, sh1, bi = M["Shoulder.L"].location, E[("Shoulder.L", 'T')].location, M["Bicep.L"].location
+rep("đuôi xương đòn tự nằm trên đoạn tới vai", ((sh1 - sh0).cross(bi - sh0)).length < 1e-4 and (sh1 - sh0).length < (bi - sh0).length)
 
 # chuỗi tóc đôi + roll tay
 st = sc.srp_marker

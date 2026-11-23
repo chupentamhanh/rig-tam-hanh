@@ -7,6 +7,24 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.35.0 — 2026-11-23
+
+**Đơn giản hoá thao tác đặt marker.**
+- Một chế độ duy nhất: click chọn khớp, giữ và kéo để dời, Ctrl+click đưa khớp đang chọn
+  tới chỗ click (Ctrl+Shift: trên da), chuột phải lùi, Enter ghi, Esc tạm dừng. Khớp không
+  tự nhảy; panel có danh sách khớp theo bộ phận.
+- Không chọn nhầm: marker nằm trong collection tắt, viewport chỉ nhận marker, panel khác ẩn
+  trong lúc chỉnh.
+- Chỉ cần đặt khớp chính (22 khớp với bộ người 4 ngón). Đốt sống, đốt ngón, đuôi xương đòn,
+  đuôi bàn tay tự nội suy và vẫn kéo được từng đốt.
+- Bộ phận nghiêng: *Căn cả chuỗi vào giữa thịt* (giới hạn độ dịch, xa quá thì giữ nguyên) và
+  *Trục gập theo chuỗi*; xoay roll cả chuỗi ±5°, ±15°, ±90°.
+- File lưu marker bản 1.34 tự chuyển khi mở chế độ chỉnh. Đo trên bản sao Mothman: 75 marker
+  còn 67, vị trí lệch 0 mm.
+- Sửa: gốc ngón và đuôi xương bàn bị tách đôi trên mesh có ma trận xoay / scale; đặt xương
+  đòn kéo lệch cột sống và tay bên kia.
+- Test `markers` 48 mục; 14 thao tác chuột mô phỏng đạt. Chưa thử bằng chuột thật.
+
 ## 1.34.0 — 2026-11-23
 
 **Đặt marker theo từng khớp.**
