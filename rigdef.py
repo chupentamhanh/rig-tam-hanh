@@ -98,6 +98,7 @@ TEMPLATE_BY_KIND = {t['kind']: t for t in LIMB_TEMPLATES}
 # / móng chạm đất. Giữ nguyên ba tên Thigh-Shin-Foot nên FK/IK, weight, retarget
 # và Humanoid dùng chung một đường. Khác duy nhất: control IK đặt ở chỗ chạm đất.
 TAG_LEG = "srp_leg"
+TAG_CHAIN = "srp_chain"     # xuong phu nguoi dung them (tai, duoi, canh...), luon xuat sang game
 LEG_TYPES = (
     ('HUMAN', "Người", "Đi bằng cả bàn chân, gót chạm đất"),
     ('PAW', "Chó / thú", "Đi bằng ngón: cổ chân sau nhấc cao, gối sau gập ngược"),

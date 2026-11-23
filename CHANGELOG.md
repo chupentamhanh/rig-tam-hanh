@@ -7,6 +7,20 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.36.0 — 2026-11-23
+
+**Vẽ chuỗi xương phụ ngay trong chế độ marker.**
+- Tai, Đuôi, Cánh, Tóc, Áo, Khác: click từ gốc ra ngọn, Enter để tạo. Chỉ click gốc và ngọn
+  thì chia đều theo số đốt. Chuột phải bỏ khớp vừa vẽ, Esc huỷ chuỗi.
+- Xương cha tự chọn: tai, đuôi, cánh, tóc bám vào thân; áo và Khác bám xương gần nhất. Đổi
+  cha hoặc xoá chuỗi ở panel (cả bên đối xứng).
+- Gốc lệch tâm tự tạo cả hai bên. Click đầu trúng marker có sẵn thì chuỗi rẽ nhánh từ đó.
+- Trục gập tính theo dáng chuỗi vừa vẽ. Chuỗi đơn không bị ghim vào trục đối xứng.
+- Unity: chế độ *Chỉ xương Humanoid* giữ lại xương chuỗi phụ (chưa đo clip animation của chúng). Đo trên bản
+  sao Mothman, Unity 2022.3: Humanoid hợp lệ, 46 xương map, xương cánh giữ đúng cha, có weight.
+- Sửa: vùng nút điều hướng viewport nuốt click ở góc trên bên phải.
+- Test `markers` 66 mục; 11 thao tác chuột mô phỏng đạt. Chưa thử bằng chuột thật.
+
 ## 1.35.0 — 2026-11-23
 
 **Đơn giản hoá thao tác đặt marker.**

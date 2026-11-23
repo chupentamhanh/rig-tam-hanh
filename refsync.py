@@ -312,6 +312,9 @@ def apply_ref(context, ref, rig):
             or rig.data.collections.new(collection)
         group.assign(rig.data.bones[name])
         rig.pose.bones[name].rotation_mode = 'QUATERNION'
+    for name in plan.chains:
+        if name in rig.data.bones:
+            rig.data.bones[name][rigdef.TAG_CHAIN] = True
 
     context.view_layer.update()
     for obj, matrix in pinned:

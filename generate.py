@@ -115,6 +115,7 @@ class Plan:
         self.rows = []
         self.names = set()
         self.tags = {}              # {ten xuong: kieu chan}
+        self.chains = set()         # xuong thuoc chuoi phu (tai, duoi, canh...)
 
     def add(self, name, head, tail, parent, connect, deform, collection,
             z_axis=None):
@@ -345,6 +346,7 @@ def build_plan(bones, parts, roll=True):
                        rigdef.bone_name("Hand_Master", inst, side))
         elif kind == 'CHAIN':
             _ref_chain(plan, part, bones, "Root")
+            plan.chains.update(part.values())
 
     return plan, None
 
@@ -403,6 +405,9 @@ def build_skeleton(context, plan, name="SRP_Rig"):
         pose_bone.rotation_mode = 'QUATERNION'
     for bone_name, leg in plan.tags.items():
         armature.bones[bone_name][rigdef.TAG_LEG] = leg
+    for bone_name in plan.chains:
+        if bone_name in armature.bones:
+            armature.bones[bone_name][rigdef.TAG_CHAIN] = True
 
     # Chuoi IK va bone deform la co cau ben trong, khong phai control.
     for hidden in ("Spare Bones", "Deform Bones"):

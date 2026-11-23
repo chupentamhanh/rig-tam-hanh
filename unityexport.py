@@ -409,6 +409,11 @@ def check(arm):
 
 # ============================================================ khung xương game
 
+def chain_bones(arm):
+    """Xuong deform thuoc chuoi phu nguoi dung them (tai, duoi, canh...)."""
+    return [b.name for b in arm.data.bones if b.use_deform and b.get(rigdef.TAG_CHAIN)]
+
+
 def game_bones(arm, hmap, only_human=False):
     """{tên bone: tên cha trong khung} theo thứ tự cha trước con.
 
@@ -418,7 +423,9 @@ def game_bones(arm, hmap, only_human=False):
     """
     B = arm.data.bones
     if only_human:
-        keep = set(hmap.values())
+        # Tai, duoi, canh do nguoi dung them: bo di la mat han bo phan, khac voi
+        # xuong mat (da co blendshape thay the).
+        keep = set(hmap.values()) | set(chain_bones(arm))
     else:
         keep = {b.name for b in B if b.use_deform} | set(hmap.values())
         hips = B[hmap['Hips']]
@@ -1000,7 +1007,8 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
         # json ghi TRƯỚC FBX: Unity đang mở mà nạp FBX lúc json chưa có thì vẫn
         # nhận ra (script Unity cũng tự import lại FBX khi json tới sau)
         mapping = {
-            'version': 1, 'character': safe(name), 'keep_extra': not only_human,
+            'version': 1, 'character': safe(name),
+            'keep_extra': not only_human or bool(chain_bones(arm)),
             'keep_rest_pose': not tpose,
             'keep_leg_rest': any(l.is_digitigrade(arm) for l in rigdef.limbs_for(arm)),
             'combined': combined,
@@ -1116,8 +1124,9 @@ class SRP_UnitySettings(PropertyGroup):
                                 description="Chỉ xuất mesh của rig nằm trong collection này")
     only_human: BoolProperty(
         name="Chỉ xương Humanoid", default=True,
-        description="Bật: FBX chỉ có các xương Unity Humanoid cần (Hips làm gốc). "
-                    "Trọng số của xương mặt, tai, Palm, đốt sống thừa... dồn sang "
+        description="Bật: FBX chỉ có các xương Unity Humanoid cần (Hips làm gốc) cùng "
+                    "các chuỗi phụ bạn thêm (tai, đuôi, cánh...). "
+                    "Trọng số của xương mặt, Palm, đốt sống thừa... dồn sang "
                     "xương Humanoid gần nhất; biểu cảm mặt đi qua blendshape. "
                     "Tắt: xuất mọi xương deform (giữ được animation xương mặt)")
     combine: BoolProperty(

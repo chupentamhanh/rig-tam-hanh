@@ -185,7 +185,11 @@ HELP = {
         "Enter: ghi vào bộ ref và thoát. Esc: tạm dừng, lần sau chỉnh tiếp.",
         "Xoay, zoom viewport như bình thường. Trong lúc này không chọn được object khác.",
         "Chọn khớp để xem trục (đỏ X là trục gập, xanh Z) và chỉnh roll ở panel.",
-        "Tai, tóc, đuôi, quần áo: thêm chuỗi ở panel, rồi bấm Mở chỉnh marker.",
+        "Tai, đuôi, cánh, tóc, áo: bấm nút ở mục Thêm chuỗi, click từ gốc ra ngọn, Enter.",
+        "Chỉ click gốc và ngọn thì chia đều theo Số đốt. Click nhiều khớp: mỗi click một khớp.",
+        "Xương cha tự chọn: tai, đuôi, cánh, tóc bám vào thân; áo bám xương gần nhất.",
+        "Gốc lệch tâm thì tự tạo cả hai bên. Chọn khớp của chuỗi để đổi cha hoặc xoá.",
+        "Click đầu trúng marker có sẵn: chuỗi rẽ nhánh từ đó (nan cánh, nhánh tóc).",
     )),
     'ref_parts': ("3 · Các bộ phận", (
         "Kéo xương ref cho khớp nhân vật trước khi dựng rig.",

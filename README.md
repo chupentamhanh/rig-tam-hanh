@@ -148,7 +148,9 @@ Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay tr
    Chuột phải: lùi. Đặt các khớp chính là đủ, đốt giữa tự chia và vẫn kéo được.
 4. Bộ phận nghiêng: *Căn cả chuỗi vào giữa thịt*, *Trục gập theo chuỗi*, rồi xoay roll nếu cần
    (đỏ X là trục gập, xanh Z).
-5. Tai, tóc, đuôi, quần áo: *Thêm chuỗi*, chọn số đốt, xương cha, đơn hoặc đôi L/R.
+5. Tai, đuôi, cánh, tóc, áo: bấm nút ở *Thêm chuỗi xương*, click từ gốc ra ngọn, **Enter**. Chỉ
+   click gốc và ngọn thì chia đều theo số đốt. Gốc lệch tâm tự tạo cả hai bên; click đầu trúng
+   marker có sẵn thì rẽ nhánh từ đó. Chọn khớp của chuỗi để đổi xương cha hoặc xoá.
 6. **Enter** để ghi vào bộ ref (Esc: tạm dừng), rồi dựng rig như bình thường.
 
 ### 2. Weight: sửa, tối ưu, vẽ tay

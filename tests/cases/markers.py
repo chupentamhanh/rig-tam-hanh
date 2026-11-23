@@ -139,13 +139,42 @@ rep("đuôi xương đòn tự nằm trên đoạn tới vai", ((sh1 - sh0).cros
 
 # chuỗi tóc đôi + roll tay
 st = sc.srp_marker
-st.chain_name, st.chain_count, st.chain_pair, st.chain_socket = "Hair", 3, True, "Head"
-rep("thêm chuỗi đôi", bpy.ops.srp.marker_chain() == {'FINISHED'})
-rep("chuỗi có đủ 2 bên", all(n in ref.data.bones for n in ("Hair.L", "Hair.L.002", "Hair.R", "Hair.R.002")))
+head_tip = next(m for m in MK.markers_of(ref) if ("Head", 'T') in [tuple(x) for x in MK.ends_of(m)]).location.copy()
+hair = [head_tip + Vector(v) for v in ((.08, .02, -.03), (.12, .05, -.10), (.14, .09, -.18), (.15, .12, -.26))]
+made, why = MK.add_chain(ctx, ref, "Hair", hair, body, True)
+rep("vẽ chuỗi: gốc lệch tâm tự tạo cả hai bên", not why and all(n in ref.data.bones for n in ("Hair.L", "Hair.L.002", "Hair.R", "Hair.R.002")), str(why))
+E = MK.end_map(ref)
+rep("vẽ chuỗi: khớp đúng chỗ click", all((E[("Hair.L" if i == 0 else "Hair.L.%03d" % i, 'H')].location - hair[i]).length < 1e-6 for i in range(3)) and (E[("Hair.L.002", 'T')].location - hair[3]).length < 1e-6)
+rep("vẽ chuỗi: bên phải là ảnh gương", (E[("Hair.R.002", 'T')].location - MK.mirror_point(ref, hair[3])).length < 1e-6)
+rep("vẽ chuỗi: tự nối vào xương gần nhất", ref.data.bones["Hair.L"].parent.name == "Head", ref.data.bones["Hair.L"].parent.name)
 M = {n: m for m in MK.markers_of(ref) for n, e in MK.ends_of(m) if e == 'H'}
 rep("gốc tóc là marker riêng, không dính đỉnh đầu", not any(n == "Head" and e == 'T' for n, e in MK.ends_of(M["Hair.L"])))
-head_tip = next(m for m in MK.markers_of(ref) if ("Head", 'T') in [tuple(x) for x in MK.ends_of(m)])
-MK.place(ref, M["Hair.L"], head_tip.location + Vector((0.08, 0.02, -0.03)))
+rep("chuỗi vào danh sách khớp", any(g["stage"] == "Phụ kiện" and g["marker"] == M["Hair.L"].name for g in MK.guide_of(ref)))
+ear = [Vector((cx - .07, 0.0, head_tip.z - .08)), Vector((cx - .13, 0.02, head_tip.z - .02))]
+made, why = MK.add_chain(ctx, ref, "Ear", MK.divide_points(ear, 2), body, True)
+rep("vẽ ở bên phải vẫn thành đúng cặp L/R", not why and made == ["Ear.L", "Ear.L.001"] and MK.end_map(ref)[("Ear.L", 'H')].location.x > cx and MK.end_map(ref)[("Ear.R", 'H')].location.x < cx, str(made))
+hip = M["Hips"].location
+tail = [hip + Vector((0.002, .10 * i + .05, -.02 * i)) for i in range(5)]
+made, why = MK.add_chain(ctx, ref, "Tail", tail, body, True)
+rep("đuôi giữa người là một chuỗi đơn", not why and made[0] == "Tail" and "Tail.L" not in ref.data.bones and len(made) == 4, str(made))
+rep("chuỗi đơn không bị ghim vào trục", abs(MK.end_map(ref)[("Tail", 'H')].location.x - tail[0].x) < 1e-6)
+rep("đuôi nối vào thân", ref.data.bones["Tail"].parent.name in ("Hips", "Spine"), ref.data.bones["Tail"].parent.name)
+E = MK.end_map(ref)
+fork_at = E[("Hair.L.001", 'H')]
+twig = [fork_at.location.copy(), fork_at.location + Vector((.06, -.03, -.05)), fork_at.location + Vector((.10, -.05, -.11))]
+made, why = MK.add_chain(ctx, ref, "Twig", twig, body, True, attach=fork_at.name)
+E = MK.end_map(ref)
+rep("rẽ nhánh từ marker có sẵn", not why and ref.data.bones["Twig.L"].parent.name == "Hair.L.001" and ref.data.bones["Twig.R"].parent.name == "Hair.R.001" and E[("Twig.L", 'H')] == E[("Hair.L.001", 'H')], str(why))
+made, why = MK.add_chain(ctx, ref, "Hair", [head_tip + Vector((.05, 0, 0)), head_tip + Vector((.09, 0, .04))], body, True)
+near_arm = M["Bicep.L"].location + Vector((0.01, 0.03, 0.0))
+rep("cánh sát tay vẫn bám vào thân", refrig.part_of(ref.data.bones[MK.nearest_parent(ref, near_arm, True, MK.CHAIN_PRESETS[2][3])])[0] in ('HIPS', 'SPINE') and refrig.part_of(ref.data.bones[MK.nearest_parent(ref, near_arm, True)])[0] == 'ARM', MK.nearest_parent(ref, near_arm, True, MK.CHAIN_PRESETS[2][3]))
+rep("trùng tên tự đánh số", not why and made == ["Hair_2.L"], str(made))
+gone = MK.delete_chain(ctx, ref, MK.end_map(ref)[("Hair_2.L", 'H')], body)
+rep("xoá chuỗi xoá cả hai bên", gone == 2 and "Hair_2.L" not in ref.data.bones and "Hair_2.R" not in ref.data.bones, str(gone))
+why = MK.set_chain_parent(ctx, ref, MK.end_map(ref)[("Ear.L", 'H')], "Neck", body)
+rep("đổi xương cha cả hai bên", not why and ref.data.bones["Ear.L"].parent.name == "Neck" and ref.data.bones["Ear.R"].parent.name == "Neck", str(why))
+rep("vị trí khớp giữ nguyên sau khi đổi cha", (MK.end_map(ref)[("Ear.L.001", 'T')].location - MK.mirror_point(ref, ear[1])).length < 1e-6)
+M = {n: m for m in MK.markers_of(ref) for n, e in MK.ends_of(m) if e == 'H'}
 ref.data.bones["Index.L"][MK.TAG_ROLL] = 30.0
 
 auto = {}
@@ -185,6 +214,13 @@ rig = bpy.data.objects["MK_Rig"]
 rep("đủ 4 chi", len(rigdef.limbs_for(rig)) == 4)
 rep("FK/IK chuyển được", not build.verify_switching(ctx, rig))
 rep("xương tóc vào rig", "Hair.L.002" in rig.data.bones and "Hair.R" in rig.data.bones)
+rb = rig.data.bones
+rep("rig giữ đúng cha của chuỗi", rb["Tail"].parent.name in ("Hips", "Spine") and rb["Twig.L"].parent.name == "Hair.L.001" and rb["Ear.R"].parent.name == "Neck")
+rep("chuỗi có control để bấm", all(rig.pose.bones[n].custom_shape is not None for n in ("Tail", "Ear.L", "Hair.R.002", "Twig.L")))
+rep("chuỗi có deform", all(rb[n].use_deform for n in ("Tail.003", "Ear.R.001", "Twig.R.001")))
+kept = UE.game_bones(rig, UE.humanoid_map(rig), only_human=True)
+rep("xuất Unity mặc định vẫn giữ chuỗi", all(n in kept for n in ("Tail", "Tail.003", "Ear.L", "Hair.R.002", "Twig.L")) and "Palm.L.001" not in kept)
+rep("xuất Unity giữ đúng cha chuỗi", kept["Twig.L"] == "Hair.L.001" and kept["Tail.001"] == "Tail", str(kept.get("Twig.L")))
 rep("rig giữ roll tay", (rig.data.bones["Index.L"].matrix_local.to_3x3() @ Vector((0, 0, 1)) - wz("Index.L")).length < 1e-3)
 hm = UE.humanoid_map(rig)
 rep("đủ xương Humanoid chính", all(k in hm for k in ("Hips", "Spine", "Head", "LeftUpperArm", "LeftHand", "RightFoot")), str(len(hm)))
