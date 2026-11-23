@@ -1,0 +1,116 @@
+"""Đặt marker từng khớp: dựng từ marker trên mesh tạm, kiểm vị trí, roll, FK/IK, Unity. argv: -- outdir"""
+import bpy, sys, os, math
+import addon_utils
+from mathutils import Matrix, Vector
+
+OUT = sys.argv[sys.argv.index("--") + 1]
+os.makedirs(OUT, exist_ok=True)
+addon_utils.enable("rig_tam_hanh", default_set=False)
+from rig_tam_hanh import markers as MK, refrig, generate, build, rigdef, unityexport as UE
+
+ctx = bpy.context
+sc = ctx.scene
+results = []
+
+
+def rep(name, ok, detail=""):
+    results.append(bool(ok))
+    print("[%s] %s %s" % ("ĐẠT" if ok else "HỎNG", name, detail))
+
+
+bpy.ops.mesh.primitive_cube_add(size=1, location=(0.1, 0, 0.9))
+body = ctx.object
+body.name = "Body"
+body.scale = (0.8, 0.3, 1.8)
+bpy.ops.object.transform_apply(scale=True)
+gs = sc.srp_generate
+gs.target_mesh = body
+gs.rig_name = "MK_Rig"
+sc.srp_ref.fingers = 4
+sc.srp_ref.leg_type = 'HUMAN'
+
+rep("tạo marker", bpy.ops.srp.marker_start() == {'FINISHED'})
+ref = refrig.find_ref(ctx)
+ms = MK.markers_of(ref)
+ends = sum(len(MK.ends_of(m)) for m in ms)
+rep("mỗi đầu xương thuộc đúng một marker", ends == 2 * len(ref.data.bones), "%d/%d" % (ends, 2 * len(ref.data.bones)))
+rep("khớp nối liền gộp một marker", len(ms) < 2 * len(ref.data.bones), "%d marker, %d xương" % (len(ms), len(ref.data.bones)))
+M = {n: m for m in ms for n, e in MK.ends_of(m) if e == 'H'}
+rep("cổ tay và 4 xương bàn cùng một marker", all(M[n] == M["Hand_Master.L"] for n in ("Palm.L.001", "Palm.L.002", "Palm.L.003", "Palm.L.004")))
+rep("marker đôi nhận đúng cặp", M["Bicep.L"].get(MK.TAG_TWIN) == M["Bicep.R"].name and MK.is_center(M["Spine.001"]))
+q = MK.queue_of(ref)
+rep("thứ tự đặt: hông trước, không có bên phải", q[0] == M["Hips"].name and not any(".R" in n for n in q), q[0])
+
+# điểm giữa khối thịt
+tree = MK.mesh_tree(ctx, body)
+p = MK.center_hit(tree, Vector((0.3, -5, 1.0)), Vector((0, 1, 0)))
+rep("click rơi vào giữa khối thịt", p is not None and abs(p.y) < 1e-3, str(p))
+s = tree.ray_cast(Vector((0.3, -5, 1.0)), Vector((0, 1, 0)))[0]
+rep("Shift+click nằm trên da", abs(s.y + 0.15) < 1e-3)
+
+# đặt cổ tay: bàn tay chưa đặt đi theo, bên phải là ảnh gương
+cx = ref[MK.TAG_CX]
+MK.place(ref, M["Bicep.L"], Vector((cx + 0.14, 0.01, 1.45)))
+old = M["Index.L"].location - M["Hand_Master.L"].location
+MK.place(ref, M["Hand_Master.L"], Vector((cx + 0.42, 0.0, 1.20)))
+new = M["Index.L"].location - M["Hand_Master.L"].location
+rep("đặt cổ tay thì ngón đi theo", abs(new.length - old.length) > 1e-5 or (new - old).length > 1e-3, "%.3f m" % (new - old).length)
+twin = M["Hand_Master.R"].location
+rep("bên phải là ảnh gương", abs((twin.x - cx) + (M["Hand_Master.L"].location.x - cx)) < 1e-6 and abs(twin.z - 1.20) < 1e-6)
+MK.place(ref, M["Spine.001"], Vector((cx + 0.2, 0.0, 1.05)))
+rep("khớp giữa bị ghim vào trục đối xứng", abs(M["Spine.001"].location.x - cx) < 1e-6)
+MK.place(ref, M["Forearm.L"], Vector((cx + 0.28, 0.035, 1.33)))
+
+# chuỗi tóc đôi + roll tay
+st = sc.srp_marker
+st.chain_name, st.chain_count, st.chain_pair, st.chain_socket = "Hair", 3, True, "Head"
+rep("thêm chuỗi đôi", bpy.ops.srp.marker_chain() == {'FINISHED'})
+rep("chuỗi có đủ 2 bên", all(n in ref.data.bones for n in ("Hair.L", "Hair.L.002", "Hair.R", "Hair.R.002")))
+M = {n: m for m in MK.markers_of(ref) for n, e in MK.ends_of(m) if e == 'H'}
+rep("gốc tóc là marker riêng, không dính đỉnh đầu", not any(n == "Head" and e == 'T' for n, e in MK.ends_of(M["Hair.L"])))
+head_tip = next(m for m in MK.markers_of(ref) if ("Head", 'T') in [tuple(x) for x in MK.ends_of(m)])
+MK.place(ref, M["Hair.L"], head_tip.location + Vector((0.08, 0.02, -0.03)))
+ref.data.bones["Index.L"][MK.TAG_ROLL] = 30.0
+
+auto = {}
+ref.data.bones["Index.L"][MK.TAG_ROLL] = 0.0
+base = MK.frames(ref)["Index.L"][2].copy()
+ref.data.bones["Index.L"][MK.TAG_ROLL] = 30.0
+rep("Áp dụng", bpy.ops.srp.marker_apply() == {'FINISHED'})
+B = ref.data.bones
+W = ref.matrix_world
+
+
+def wz(n):
+    return (W.to_3x3() @ B[n].matrix_local.to_3x3() @ Vector((0, 0, 1))).normalized()
+
+
+rep("vị trí ghi đúng vào ref", ((W @ B["Hand_Master.L"].head_local) - Vector((cx + 0.42, 0, 1.2))).length < 1e-5)
+worst = 0.0
+for b in B:
+    t = MK.flip_side if False else None
+    side, other = MK._pair_side(b.name)
+    if side == 'L' and other in B:
+        z, o = wz(b.name), wz(other)
+        if "Index" in b.name and b.name == "Index.L":
+            pass
+        worst = max(worst, (Vector((-z.x, z.y, z.z)) - o).length)
+rep("roll hai bên là ảnh gương", worst < 1e-3, "lệch %.5f" % worst)
+ang = math.degrees(base.angle(wz("Index.L")))
+rep("roll tay 30° đúng trên xương", abs(ang - 30) < 0.1, "%.2f°" % ang)
+d = (B["Thigh.L"].tail_local - B["Thigh.L"].head_local)
+rep("đùi: Z ra trước", wz("Thigh.L").y < -0.9, "%.3f" % wz("Thigh.L").y)
+rep("cột sống: Z ra sau", wz("Spine.001").y > 0.9, "%.3f" % wz("Spine.001").y)
+rep("cánh tay chéo (A-pose): Z ra sau", wz("Bicep.L").y > 0.8, "%.3f" % wz("Bicep.L").y)
+
+# dựng rig
+rep("dựng rig", bpy.ops.srp.generate() == {'FINISHED'})
+rig = bpy.data.objects["MK_Rig"]
+rep("đủ 4 chi", len(rigdef.limbs_for(rig)) == 4)
+rep("FK/IK chuyển được", not build.verify_switching(ctx, rig))
+rep("xương tóc vào rig", "Hair.L.002" in rig.data.bones and "Hair.R" in rig.data.bones)
+rep("rig giữ roll tay", (rig.data.bones["Index.L"].matrix_local.to_3x3() @ Vector((0, 0, 1)) - wz("Index.L")).length < 1e-3)
+hm = UE.humanoid_map(rig)
+rep("đủ xương Humanoid chính", all(k in hm for k in ("Hips", "Spine", "Head", "LeftUpperArm", "LeftHand", "RightFoot")), str(len(hm)))
+rep("không còn xương dài 0", not any(b.length < 1e-4 for b in rig.data.bones))
+print("TỔNG %d/%d" % (sum(results), len(results)))

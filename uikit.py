@@ -176,6 +176,17 @@ HELP = {
         "(cả lông mày cùng hình) chép từ mẫu thay cho automatic weights.",
         "Mắt trùng hình mẫu tự vào danh sách nhãn cầu ở bước 1.",
     )),
+    'markers': ("Đặt marker từng khớp", (
+        "Chọn kiểu chân, số ngón rồi bấm 'Tạo marker'. Mỗi khớp là một marker.",
+        "'Đặt lần lượt': click từng khớp trên model, marker tự nằm giữa khối thịt.",
+        "Shift+click: đặt trên da. Space: giữ chỗ ước lượng. Backspace: lùi.",
+        "Khớp chưa đặt tự đi theo khớp cha, nên càng đặt càng gần đúng.",
+        "Muốn chỉnh lại: chọn marker, bấm G như object thường.",
+        "Roll tự tính theo quy ước cố định: đỏ là X (trục gập), xanh là Z.",
+        "Chọn marker để chỉnh roll riêng từng xương. Bên phải tự lấy ảnh gương.",
+        "Tai, tóc, đuôi, quần áo: thêm chuỗi, chọn số đốt và xương cha.",
+        "Xong bấm 'Áp dụng vào bộ ref', rồi dựng rig như bình thường.",
+    )),
     'ref_parts': ("3 · Các bộ phận", (
         "Kéo xương ref cho khớp nhân vật trước khi dựng rig.",
         "Ô xương cha để trống thì nối vào chỗ mặc định của bộ phận.",

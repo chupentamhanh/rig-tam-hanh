@@ -12,7 +12,7 @@ co nut "?" tren dau, noi dung o `uikit.HELP`.
 
 import bpy
 
-from . import (cloth, face, facebendy, fitref, generate, health, onion, picker, posekey, prefs, refrig,
+from . import (cloth, face, facebendy, fitref, generate, health, markers, onion, picker, posekey, prefs, refrig,
                remap, retarget, rigdef, uikit, unityexport, ux, weightfence, widgets)
 
 
@@ -82,6 +82,21 @@ class SRP_PT_build(_Base, bpy.types.Panel):
             row.label(text="1 · Chọn mesh", icon='MESH_DATA')
             uikit.help_button(row, 'target')
             generate.draw_target(box, context)
+
+
+class SRP_PT_markers(_Base, bpy.types.Panel):
+    """Cach dat khop nhanh, dung chung cho buoc 2-4 nen khong phai mot `_Step`."""
+    bl_label = "Đặt marker từng khớp"
+    bl_idname = "SRP_PT_markers"
+    bl_parent_id = "SRP_PT_build"
+    help = 'markers'
+
+    @classmethod
+    def poll(cls, context):
+        return uikit.focus(context) in (2, 3, 4)
+
+    def draw(self, context):
+        markers.draw_panel(self.layout, context)
 
 
 class SRP_PT_ref_start(_Step, bpy.types.Panel):
@@ -571,7 +586,7 @@ class SRP_PT_repair_solve(_NeedRig, bpy.types.Panel):
 # Cha phai dang ky truoc con; thu tu goc = thu tu tren thanh chon khu.
 CLASSES = (
     SRP_PT_zone,
-    SRP_PT_build, SRP_PT_ref_start, SRP_PT_ref_parts, SRP_PT_skeleton,
+    SRP_PT_build, SRP_PT_markers, SRP_PT_ref_start, SRP_PT_ref_parts, SRP_PT_skeleton,
     SRP_PT_shape, SRP_PT_regions, SRP_PT_bind, SRP_PT_cloth,
     SRP_PT_face, SRP_PT_face_pose, SRP_PT_face_test, SRP_PT_face_config,
     SRP_PT_animate, SRP_PT_picker, SRP_PT_picker_hand, SRP_PT_picker_face,

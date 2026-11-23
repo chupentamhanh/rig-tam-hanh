@@ -7,6 +7,21 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.34.0 — 2026-11-23
+
+**Đặt marker theo từng khớp.**
+- Module `markers`: mỗi khớp là một marker, nằm trên bộ ref. "Áp dụng" ghi vị trí và
+  roll vào bộ ref, nên dựng rig, FK/IK, weight, xuất Unity đi đường cũ.
+- Đặt lần lượt: click trên model, marker vào giữa khối thịt (Shift: trên da). Khớp chưa
+  đặt đi theo khớp cha bằng phép đồng dạng. Đối xứng L/R khi đặt và khi kéo.
+- Roll tự tính theo quy ước cố định (Y dọc xương, X là trục gập, R là ảnh gương của L),
+  hiện trục trên viewport, chỉnh riêng từng xương.
+- Thêm chuỗi đơn hoặc đôi L/R cho tai, tóc, đuôi, quần áo.
+- Đo: bộ người 74 marker, 41 lượt đặt khi đối xứng; roll hai bên lệch 0.00000; roll tay
+  30° ra 30.00°. Mô phỏng click trên bản sao Mothman, bind, import Unity 2022.3: Humanoid
+  hợp lệ, 46 xương. Chưa thử bằng chuột thật.
+- Test mới: `markers` (28 mục).
+
 ## 1.33.0 — 2026-11-23
 
 **Kiểu chân (Người / Chó / Dê) và số ngón tay.**

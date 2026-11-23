@@ -140,6 +140,15 @@ weight mặt chính xác và bước 7 dựng shape key.
 
 Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay trong danh sách rồi thêm lại.
 
+**Đặt marker từng khớp** (cách nhanh thay cho kéo xương trong Edit Mode, mục *Đặt marker từng khớp*):
+
+1. Chọn kiểu chân, số ngón, bấm **Tạo marker**.
+2. **Đặt lần lượt**: click từng khớp, marker tự vào giữa khối thịt. Shift+click: trên da. Space:
+   giữ chỗ ước lượng. Tab: sang bộ phận sau. Backspace: lùi. Enter / Esc: xong.
+3. Chỉnh lại bằng G. Chọn marker để xem trục (đỏ X là trục gập, xanh Z) và chỉnh roll từng xương.
+4. Tai, tóc, đuôi, quần áo: *Thêm chuỗi*, chọn số đốt, xương cha, đơn hoặc đôi L/R.
+5. **Áp dụng vào bộ ref**, rồi dựng rig như bình thường.
+
 ### 2. Weight: sửa, tối ưu, vẽ tay
 
 <img src="docs/images/fix.png" width="420" align="right">
