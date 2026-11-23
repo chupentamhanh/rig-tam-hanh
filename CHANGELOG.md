@@ -7,6 +7,18 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.36.1 — 2026-11-23
+
+**Sửa chuỗi đối xứng và khớp rẽ nhánh.**
+- Chuỗi mọc từ giữa người rồi toả sang một bên (cánh) giờ tạo đủ hai bên; trước đây chỉ xét
+  điểm gốc nên ra một bên. Đuôi vẫn là chuỗi đơn dù cong sang một bên.
+- Nút *Tạo bên đối xứng* cho chuỗi đơn đã vẽ, giữ nguyên dáng và xương cha.
+- Khớp rẽ nhánh: panel cho chọn từng nhánh hoặc tất cả nhánh. Xoay, căn thịt, trục gập, đổi
+  cha, xoá chỉ tác động lên lựa chọn đó; trước đây chỉ tới được nhánh đầu tiên.
+- Khớp cột sống có chuỗi mọc vào vẫn được ghim vào trục đối xứng.
+- Đổi cha một nhánh tách khớp chung thành hai marker đúng chỗ, không mất đầu xương.
+- Test `markers` 86 mục; 7 thao tác chọn nhánh bằng chuột mô phỏng đạt. Chưa thử bằng chuột thật.
+
 ## 1.36.0 — 2026-11-23
 
 **Vẽ chuỗi xương phụ ngay trong chế độ marker.**

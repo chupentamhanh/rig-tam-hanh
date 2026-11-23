@@ -190,6 +190,7 @@ HELP = {
         "Xương cha tự chọn: tai, đuôi, cánh, tóc bám vào thân; áo bám xương gần nhất.",
         "Gốc lệch tâm thì tự tạo cả hai bên. Chọn khớp của chuỗi để đổi cha hoặc xoá.",
         "Click đầu trúng marker có sẵn: chuỗi rẽ nhánh từ đó (nan cánh, nhánh tóc).",
+        "Chọn khớp rẽ nhánh: panel hỏi chỉnh nhánh nào, hoặc tất cả nhánh.",
     )),
     'ref_parts': ("3 · Các bộ phận", (
         "Kéo xương ref cho khớp nhân vật trước khi dựng rig.",

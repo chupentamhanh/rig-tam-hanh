@@ -168,7 +168,69 @@ rep("rẽ nhánh từ marker có sẵn", not why and ref.data.bones["Twig.L"].pa
 made, why = MK.add_chain(ctx, ref, "Hair", [head_tip + Vector((.05, 0, 0)), head_tip + Vector((.09, 0, .04))], body, True)
 near_arm = M["Bicep.L"].location + Vector((0.01, 0.03, 0.0))
 rep("cánh sát tay vẫn bám vào thân", refrig.part_of(ref.data.bones[MK.nearest_parent(ref, near_arm, True, MK.CHAIN_PRESETS[2][3])])[0] in ('HIPS', 'SPINE') and refrig.part_of(ref.data.bones[MK.nearest_parent(ref, near_arm, True)])[0] == 'ARM', MK.nearest_parent(ref, near_arm, True, MK.CHAIN_PRESETS[2][3]))
-rep("trùng tên tự đánh số", not why and made == ["Hair_2.L"], str(made))
+# cánh mọc đúng giữa lưng rồi toả sang một bên vẫn phải thành một đôi
+spine_m = MK.end_map(ref)[("Spine.002", 'H')]
+back = spine_m.location.copy()
+spread = [back, back + Vector((.15, .03, .08)), back + Vector((.32, .05, .16))]
+made, why = MK.add_chain(ctx, ref, "BackWing", spread, body, True, kinds=MK.CHAIN_PRESETS[2][3])
+rep("cánh gốc giữa lưng tạo cả hai bên", not why and made[0] == "BackWing.L" and "BackWing.R.001" in ref.data.bones, str(made))
+tipL, tipR = MK.end_map(ref)[("BackWing.L.001", 'T')].location, MK.end_map(ref)[("BackWing.R.001", 'T')].location
+rep("hai cánh là ảnh gương", (MK.mirror_point(ref, tipL) - tipR).length < 1e-6 and tipL.x > cx)
+left = [back, back + Vector((-.15, .03, .08)), back + Vector((-.32, .05, .16))]
+made, why = MK.add_chain(ctx, ref, "Fan", left, body, True, attach=spine_m.name, kinds=MK.CHAIN_PRESETS[2][3])
+fan_root = MK.end_map(ref)[("Fan.L", 'H')]
+rep("vẽ ở bên phải từ khớp cột sống vẫn ra đôi", not why and made[0] == "Fan.L" and MK.end_map(ref)[("Fan.L.001", 'T')].location.x > cx and MK.end_map(ref)[("Fan.R.001", 'T')].location.x < cx, str(why))
+rep("hai gốc chung khớp cột sống", fan_root == MK.end_map(ref)[("Fan.R", 'H')] == MK.end_map(ref)[("Spine.002", 'H')])
+rep("khớp cột sống vẫn bị ghim vào trục", MK.is_center(fan_root) and MK._center_side(fan_root) and MK.marker_side(fan_root) is None)
+for n in ("Fan.L", "BackWing.L"):
+    MK.delete_chain(ctx, ref, MK.end_map(ref)[(n + ".001", 'H')], body)
+curl = [hip + Vector((0, .12, 0)), hip + Vector((.06, .2, 0)), hip + Vector((.16, .25, .04))]
+made, why = MK.add_chain(ctx, ref, "Curl", curl, body, True, root_only=MK.CHAIN_PRESETS[1][4])
+rep("đuôi cong sang một bên vẫn là một chuỗi", not why and made[0] == "Curl" and "Curl.L" not in ref.data.bones, str(made))
+MK.delete_chain(ctx, ref, MK.end_map(ref)[("Curl", 'H')], body)
+# chuỗi đơn đã vẽ (đúng trường hợp hai thuỳ cánh chung gốc) -> tạo bên đối xứng
+lobe1 = [back + Vector((.01, .02, 0)), back + Vector((.2, .03, .12)), back + Vector((.36, .04, .22))]
+lobe2 = [lobe1[0], lobe1[0] + Vector((.18, .02, -.14))]
+MK.add_chain(ctx, ref, "Lobe", lobe1, body, False, parent="Spine.002")
+MK.add_chain(ctx, ref, "Lobe_B", lobe2, body, False, attach=MK.end_map(ref)[("Lobe", 'H')].name)
+rep("chuỗi đơn trước khi đổi", "Lobe" in ref.data.bones and "Lobe.R" not in ref.data.bones and ref.data.bones["Lobe_B"].parent.name == "Lobe")
+made, why = MK.pair_chain(ctx, ref, MK.end_map(ref)[("Lobe", 'T')], body)
+made2, why2 = MK.pair_chain(ctx, ref, MK.end_map(ref)[("Lobe_B", 'T')], body)
+EE = MK.end_map(ref)
+rep("tạo bên đối xứng cho chuỗi có sẵn", not why and not why2 and all(n in ref.data.bones for n in ("Lobe.L", "Lobe.R.001", "Lobe_B.L", "Lobe_B.R")) and "Lobe" not in ref.data.bones and "Lobe_B" not in ref.data.bones, "%s %s" % (why, why2))
+rep("giữ nguyên dáng chuỗi", (EE[("Lobe.L.001", 'T')].location - lobe1[2]).length < 1e-6 and (EE[("Lobe_B.L", 'T')].location - lobe2[1]).length < 1e-6)
+rep("bên kia là ảnh gương", (EE[("Lobe.R.001", 'T')].location - MK.mirror_point(ref, lobe1[2])).length < 1e-6)
+rep("cả hai thuỳ bám vào thân", ref.data.bones["Lobe.L"].parent.name == "Spine.002" and ref.data.bones["Lobe_B.R"].parent.name == "Spine.002", ref.data.bones["Lobe_B.R"].parent.name)
+for n in ("Lobe.L", "Lobe_B.L"):
+    MK.delete_chain(ctx, ref, MK.end_map(ref)[(n, 'T')], body)
+# hai nhánh chung một gốc: chọn đúng nhánh để chỉnh
+tr0 = back + Vector((.03, .02, .02))
+top = [tr0, tr0 + Vector((.16, .02, .10)), tr0 + Vector((.32, .03, .17))]
+MK.add_chain(ctx, ref, "Top", top, body, True, parent="Spine.002")
+EB = MK.end_map(ref)
+low = [EB[("Top.L", 'H')].location.copy(), tr0 + Vector((.14, .02, -.12)), tr0 + Vector((.24, .03, -.27))]
+MK.add_chain(ctx, ref, "Low", low, body, True, attach=EB[("Top.L", 'H')].name)
+EB = MK.end_map(ref)
+fork = EB[("Top.L", 'H')]
+fork_r = EB[("Top.R", 'H')]
+rep("hai nhánh chung một marker", fork == EB[("Low.L", 'H')] and fork_r == EB[("Low.R", 'H')])
+rep("khớp rẽ nhánh liệt kê đủ chuỗi", sorted(c[0].name for c in MK.chain_menu(ref, fork)) == ["Low.L", "Top.L"])
+rep("mặc định chỉnh mọi nhánh", len(MK.picked_chains(ref, fork)) == 2)
+rep("chọn được nhánh dưới", [c[0].name for c in MK.picked_chains(ref, fork, "Low.L")] == ["Low.L"])
+rep("chọn ở bên kia vẫn đúng nhánh", [c[0].name for c in MK.picked_chains(ref, fork_r, "Low.L")] == ["Low.R"])
+for n in ("Top.L", "Top.L.001", "Low.L", "Low.L.001"):
+    ref.data.bones[n][MK.TAG_ROLL] = 11.0
+n_h, _w = MK.hinge_chain(ref, fork_r, True, chain=MK.picked_chains(ref, fork_r, "Low.L")[0])
+rep("trục gập chỉ đổi nhánh dưới", n_h == 2 and ref.data.bones["Top.L"][MK.TAG_ROLL] == 11.0 and ref.data.bones["Top.L.001"][MK.TAG_ROLL] == 11.0 and ref.data.bones["Low.L"][MK.TAG_ROLL] != 11.0)
+rep("khớp thân có chuỗi mọc vào vẫn mặc định là thân", MK.picked_chains(ref, MK.end_map(ref)[("Spine.002", 'H')])[0][0].name == "Spine" or not MK._is_chain(MK.picked_chains(ref, MK.end_map(ref)[("Spine.002", 'H')])[0]))
+root_at = fork.location.copy()
+why = MK.set_chain_parent(ctx, ref, MK.end_map(ref)[("Low.L", 'T')], "Spine.002", body)
+EB = MK.end_map(ref)
+rep("đổi cha nhánh: tách khớp, giữ đúng chỗ", not why and EB[("Low.L", 'H')] != EB[("Top.L", 'H')] and (EB[("Low.L", 'H')].location - root_at).length < 1e-6 and (EB[("Top.L", 'H')].location - root_at).length < 1e-6, str(why))
+rep("mọi đầu xương vẫn có marker", sum(len(MK.ends_of(m)) for m in MK.markers_of(ref)) == 2 * len(ref.data.bones))
+for n in ("Low.L", "Top.L"):
+    MK.delete_chain(ctx, ref, MK.end_map(ref)[(n, 'T')], body)
+rep("trùng tên tự đánh số", "Hair_2.L" in ref.data.bones and "Hair_2.R" in ref.data.bones)
 gone = MK.delete_chain(ctx, ref, MK.end_map(ref)[("Hair_2.L", 'H')], body)
 rep("xoá chuỗi xoá cả hai bên", gone == 2 and "Hair_2.L" not in ref.data.bones and "Hair_2.R" not in ref.data.bones, str(gone))
 why = MK.set_chain_parent(ctx, ref, MK.end_map(ref)[("Ear.L", 'H')], "Neck", body)
