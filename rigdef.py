@@ -93,6 +93,17 @@ LIMB_TEMPLATES = (
 
 TEMPLATE_BY_KIND = {t['kind']: t for t in LIMB_TEMPLATES}
 
+# Kiểu chân. Chân chó / dê về giải phẫu là chân người ĐI BẰNG NGÓN: xương `Foot`
+# là đoạn bàn dài dựng đứng (khớp đầu là cổ chân sau, "hock"), `Toe` là bàn chân
+# / móng chạm đất. Giữ nguyên ba tên Thigh-Shin-Foot nên FK/IK, weight, retarget
+# và Humanoid dùng chung một đường. Khác duy nhất: control IK đặt ở chỗ chạm đất.
+TAG_LEG = "srp_leg"
+LEG_TYPES = (
+    ('HUMAN', "Người", "Đi bằng cả bàn chân, gót chạm đất"),
+    ('PAW', "Chó / thú", "Đi bằng ngón: cổ chân sau nhấc cao, gối sau gập ngược"),
+    ('HOOF', "Dê / móng guốc", "Đi trên móng: cổ chân sau nhấc cao, bàn thẳng đứng"),
+)
+
 # POLE_ANGLE: gia tri nay phu thuoc roll cua xuong nen khong the doan chac.
 # Rig goc trong project dang lech: tay trai 180 do, tay phai 0 do, hai chan
 # deu 90 do — dau vet mirror sai. Day chi la MAC DINH luc sinh rig; sau khi
@@ -117,7 +128,7 @@ class Limb:
     __slots__ = ("kind", "label", "side", "inst", "deform", "fk", "ik",
                  "ctrl", "pole", "solver", "prop",
                  "collection_fk", "collection_ik", "default_switch", "pole_angle",
-                 "roll")
+                 "roll", "toe", "toe_mch")
 
     def __init__(self, template, side, inst=1):
         self.kind = template['kind']
@@ -145,6 +156,18 @@ class Limb:
         self.default_switch = template['default_switch']
         self.pole_angle = template['pole_angle']
         self.roll = tuple(named(name) for name in template['roll'])
+        self.toe = named("Toe")
+        self.toe_mch = named("ToeMch")
+
+    def leg_type(self, rig):
+        """'HUMAN' / 'PAW' / 'HOOF' -- ghi trên xương đùi lúc dựng rig."""
+        if self.kind != 'LEG':
+            return 'HUMAN'
+        bone = rig.data.bones.get(self.deform[0])
+        return bone.get(TAG_LEG, 'HUMAN') if bone is not None else 'HUMAN'
+
+    def is_digitigrade(self, rig):
+        return self.leg_type(rig) != 'HUMAN'
 
     def ik_target(self, rig):
         """Bone ma constraint IK tro toi.

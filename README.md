@@ -130,6 +130,16 @@ weight mặt chính xác và bước 7 dựng shape key.
 
 **Bước 7 · Shape key khuôn mặt** — xem khu Mặt bên dưới.
 
+**Kiểu chân và số ngón** (chọn ở Bước 3, trước khi bấm thêm bộ phận):
+
+- **Chân**: *Người*, *Chó / thú* (đi bằng ngón), *Dê / móng guốc*. Chân thú dựng thành hình chữ
+  Z: `Thigh` → gối ra trước → `Shin` → cổ chân sau ra sau → `Foot` (đoạn bàn dài) → `Toe` (bàn
+  chân hoặc móng). Control `LegIK` nằm ở chỗ chạm đất; xoay `Ball` để nhấc cổ chân sau, bàn chân
+  / móng vẫn nằm yên trên đất. FK/IK, snap, retarget và Unity Humanoid dùng được như chân người.
+- **Bàn tay**: chọn 1–5 ngón và có ngón cái hay không. Ngón còn lại tự giãn đều trên bàn tay.
+
+Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay trong danh sách rồi thêm lại.
+
 ### 2. Weight: sửa, tối ưu, vẽ tay
 
 <img src="docs/images/fix.png" width="420" align="right">

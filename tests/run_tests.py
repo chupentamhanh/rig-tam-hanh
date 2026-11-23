@@ -43,6 +43,7 @@ TESTS = [
     ("face_bendy_remove", "face_bendy_remove.py", "adult_final.blend", [], "CHECK", []),
     ("weight_fence", "weight_fence.py", "adult_final.blend", [], "CHECK", []),
     ("retarget", "retarget.py", "adult_final.blend", ["{out}"], "CHECK", []),
+    ("limb_types", "limb_types.py", None, ["{out}"], "CHECK", []),
     ("unity_export", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity"], "SMOKE", []),
     ("unity_import", "unity_import.py", None, ["{shared}/unity"], "SMOKE", []),
     ("unity_export_combined", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity_c", "combine"], "SMOKE", []),

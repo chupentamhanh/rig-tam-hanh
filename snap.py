@@ -383,6 +383,8 @@ def snap_ik_to_fk(context, rig, limb):
     end_fk = rig.pose.bones.get(limb.fk[2])
     if ctrl is None or end_fk is None:
         return None
+    if limb.is_digitigrade(rig):
+        return _snap_digi(context, rig, limb, ctrl)
 
     ev_rig = compat.evaluated(context, rig)
     target_position = ev_rig.pose.bones[limb.fk[1]].tail.copy()   # co chan / co tay
@@ -400,6 +402,20 @@ def snap_ik_to_fk(context, rig, limb):
     residual = snap_pole(context, rig, limb)
     snap_end_rotation(context, rig, limb, target_rotation)
     return residual
+
+
+def _snap_digi(context, rig, limb, ctrl):
+    """Chan thu: control o cho cham dat, cung khoi cung voi doan `Foot`.
+
+    Dat ca ma tran control theo dung phep bien doi cua `FootFK`: vi tri (va do
+    do hock) lan huong khop cung luc, khong can buoc xoay rieng quanh control.
+    """
+    B = rig.data.bones
+    reset_roll(context, rig, limb)
+    foot = compat.evaluated(context, rig).pose.bones[limb.fk[2]].matrix.copy()
+    ctrl.matrix = foot @ B[limb.fk[2]].matrix_local.inverted() @ B[limb.ctrl].matrix_local
+    context.view_layer.update()
+    return snap_pole(context, rig, limb)
 
 
 # ------------------------------------------------------------------ key

@@ -38,6 +38,7 @@ TAG_BASE = "srp_base"      # ten trong ban ve, de ben sinh rig tra cuu
 # Nam tren armature data cua bo ref. `refsync` lay hieu so "bo ref bay gio"
 # tru "anh chup nay" de biet nguoi dung vua keo xuong nao — xem `refsync`.
 TAG_BASELINE = "srp_baseline"
+TAG_LEG = "srp_leg"        # kieu chan, ghi tren xuong ref va xuong dui cua rig
 
 # Ty le theo CHIEU CAO bounding box cua mesh muc tieu, pose chu T. Chi la diem
 # xuat phat — toan bo y nghia cua buoc nay la nguoi dung keo lai cho khop nhan
@@ -169,8 +170,8 @@ PARTS = (
         sided=True,
         once=False,
         socket="Hand_Master",
-        note="20 đốt: 5 bàn + 15 đốt ngón, xếp theo hình học xương bàn tay đang "
-             "có. Bỏ qua nếu nhân vật không có ngón tay (móng, vuốt, găng "
+        note="Mỗi ngón 1 xương bàn + 3 đốt, chọn được 1-5 ngón, xếp theo hình học "
+             "xương bàn tay đang có. Bỏ qua nếu nhân vật không có ngón tay (móng, vuốt, găng "
              "cứng).",
         bones=(),                       # sinh dong, xem `_hand_spec`
     ),
@@ -214,6 +215,27 @@ FACE_TONGUE_PREFIX = "Tongue"
 FACE_BROW_PREFIX = "Eyebrow"
 
 PART_BY_KIND = {p['kind']: p for p in PARTS}
+
+# Chan di bang ngon / mong. Cung nam xuong voi chan nguoi: `Foot` la doan ban dai
+# tu co chan sau (hock) xuong, `Toe` la ban chan / mong cham dat, `Heel` la mep
+# sau cho cham dat. Gap chu Z: goi ra truoc, hock ra sau.
+_F, _Z = (0.0, -1.0, 0.0), (0.0, -0.6, 0.8)
+LEG_LAYOUTS = {
+    'PAW': (
+        ("Thigh", (0.0543, 0.0000, 0.3735), (0.0543, -0.0300, 0.2500), None, False, False, _F),
+        ("Shin",  (0.0543, -0.0300, 0.2500), (0.0543, 0.0450, 0.1250), "Thigh", True, False, _F),
+        ("Foot",  (0.0543, 0.0450, 0.1250), (0.0543, 0.0150, 0.0180), "Shin", True, False, _F),
+        ("Toe",   (0.0543, 0.0150, 0.0180), (0.0543, -0.0500, 0.0005), "Foot", True, False, UP),
+        ("Heel",  (0.0543, 0.0350, 0.0005), (0.0543, -0.0100, 0.0005), "Foot", False, False, UP),
+    ),
+    'HOOF': (
+        ("Thigh", (0.0543, 0.0000, 0.3735), (0.0543, -0.0250, 0.2550), None, False, False, _F),
+        ("Shin",  (0.0543, -0.0250, 0.2550), (0.0543, 0.0400, 0.1450), "Thigh", True, False, _F),
+        ("Foot",  (0.0543, 0.0400, 0.1450), (0.0543, 0.0180, 0.0450), "Shin", True, False, _F),
+        ("Toe",   (0.0543, 0.0180, 0.0450), (0.0543, -0.0120, 0.0005), "Foot", True, False, _Z),
+        ("Heel",  (0.0543, 0.0220, 0.0005), (0.0543, -0.0100, 0.0005), "Foot", False, False, UP),
+    ),
+}
 PART_BY_KIND['FACE']['bones'] = tuple(row for g in FACE_GROUPS for row in g[3])
 
 # {ten goc: ten goc cua cha} cho moi xuong mat — de tim cha o vung khac.
@@ -422,7 +444,8 @@ def ensure_ref(context, name, mesh_object=None):
 
 
 def add_part(context, ref, kind, side=None, inst=None, socket=None,
-             mesh_object=None, chain_name=None, chain_count=4):
+             mesh_object=None, chain_name=None, chain_count=4,
+             leg_type='HUMAN', fingers=5, thumb=True):
     """Dung xuong ref cho MOT bo phan. Tra ve danh sach ten xuong vua tao."""
     spec = PART_BY_KIND.get(kind)
     if spec is None and kind != 'CHAIN':
@@ -442,9 +465,11 @@ def add_part(context, ref, kind, side=None, inst=None, socket=None,
     if kind == 'CHAIN':
         specs = _chain_spec(ref, socket, chain_name, chain_count, height)
     elif kind == 'HAND':
-        specs = _hand_spec(ref, socket, side)
+        specs = _hand_spec(ref, socket, side, fingers, thumb)
     elif kind == 'EYE' and inst > 1:
         specs = EYE_EXTRA
+    elif kind == 'LEG' and leg_type in LEG_LAYOUTS:
+        specs = LEG_LAYOUTS[leg_type]
     else:
         specs = spec['bones']
 
@@ -522,6 +547,8 @@ def add_part(context, ref, kind, side=None, inst=None, socket=None,
             bone[TAG_INST] = inst
             bone[TAG_SIDE] = side or ""
             bone[TAG_BASE] = base
+            if kind == 'LEG':
+                bone[TAG_LEG] = leg_type
     return [full for full, _base in made]
 
 
@@ -597,8 +624,49 @@ HAND_LAYOUT = (
 )
 
 
-def _hand_spec(ref, socket, side):
-    """20 xuong ref cho mot ban tay, xep theo hinh hoc xuong `Hand_Master`.
+# Thu tu bo ngon: 4 ngon la bo ut, 3 ngon bo them ngon nhan... Ten giu nguyen
+# (`Index`, `Middle`) nen Humanoid va picker nhan dung.
+FINGER_ORDER = ("Index", "Middle", "Ring", "Pinky")
+_FINGER_PALM = {"Pinky": "Palm", "Ring": "Palm.001", "Middle": "Palm.002",
+                "Index": "Palm.003", "Thumb": "Palm.004"}
+
+
+def hand_layout(fingers=5, thumb=True):
+    """HAND_LAYOUT voi `fingers` ngon (tinh ca ngon cai neu `thumb`).
+
+    Ngon con lai duoc gian deu lai tren be ngang ban tay, de ban tay 3 ngon
+    khong bi hong mot ben cho ngon vua bo.
+    """
+    fingers = max(1, min(5, int(fingers)))
+    thumb = bool(thumb) and fingers >= 2    # mot ngon thi la ngon thuong
+    rest = fingers - 1 if thumb else min(fingers, 4)
+    keep = list(FINGER_ORDER[:rest])
+    rows = {r[0]: r for r in HAND_LAYOUT}
+    first, last = rows["Palm.003"][2][1], rows["Palm"][2][1]    # ngang: tro .. ut
+    if len(keep) == 1:
+        slots = [(first + last) * 0.5]
+    else:
+        slots = [first + (last - first) * i / (len(keep) - 1) for i in range(len(keep))]
+    shift = {}
+    for digit, slot in zip(keep, slots):
+        palm = _FINGER_PALM[digit]
+        delta = slot - rows[palm][2][1] if len(keep) < 4 else 0.0
+        shift[palm] = shift[digit] = shift[digit + ".001"] = shift[digit + ".002"] = delta
+    if thumb:
+        for n in ("Palm.004", "Thumb", "Thumb.001", "Thumb.002"):
+            shift[n] = 0.0
+    out = []
+    for name, head, tail, parent, connect, z in HAND_LAYOUT:
+        if name not in shift:
+            continue
+        d = shift[name]
+        h = head if name.startswith("Palm") else (head[0], head[1] + d, head[2])
+        out.append((name, h, (tail[0], tail[1] + d, tail[2]), parent, connect, z))
+    return out
+
+
+def _hand_spec(ref, socket, side, fingers=5, thumb=True):
+    """Xuong ref cho mot ban tay, xep theo hinh hoc xuong `Hand_Master`.
 
     Toa do o he CUC BO cua bo ref (giong `_chain_spec`), vi `add_part` chi doi
     he cho nhung bo phan dat theo ty le co the.
@@ -647,7 +715,7 @@ def _hand_spec(ref, socket, side):
     # bo phan LOCAL_KINDS) va da lat guong theo khung ban tay.
     return [(name, place(head), place(tail), parent_name, connect, False,
              axis(z))
-            for name, head, tail, parent_name, connect, z in HAND_LAYOUT]
+            for name, head, tail, parent_name, connect, z in hand_layout(fingers, thumb)]
 
 
 def _chain_spec(ref, socket, name, count, height):
@@ -814,6 +882,8 @@ def symmetrize(ref, from_side='L'):
             else (source.get(TAG_SIDE) or "")
         base = source.get(TAG_BASE) or source.name
         target[TAG_BASE] = flip_side(base, from_side, other) or base
+        if TAG_LEG in source.keys():
+            target[TAG_LEG] = source[TAG_LEG]
     return moved, created
 
 
@@ -869,8 +939,11 @@ class SRP_OT_ref_add(bpy.types.Operator):
     chain_count: IntProperty(name="Số xương", default=4, min=1, max=32)
     with_hand: BoolProperty(
         name="Kèm bàn tay", default=True,
-        description="Thêm tay thì dựng luôn 20 xương ngón, nối vào Hand_Master "
+        description="Thêm tay thì dựng luôn xương ngón, nối vào Hand_Master "
                     "của chính nó. Tắt nếu nhân vật không có ngón tay")
+    leg_type: EnumProperty(name="Kiểu chân", items=rigdef.LEG_TYPES, default='HUMAN')
+    fingers: IntProperty(name="Số ngón", default=5, min=1, max=5)
+    thumb: BoolProperty(name="Có ngón cái", default=True)
 
     @classmethod
     def poll(cls, context):
@@ -918,7 +991,8 @@ class SRP_OT_ref_add(bpy.types.Operator):
             names = add_part(context, ref, self.kind, side=side, inst=inst,
                              socket=socket, mesh_object=settings.target_mesh,
                              chain_name=self.chain_name.strip() or "Tail",
-                             chain_count=self.chain_count)
+                             chain_count=self.chain_count,
+                             leg_type=self.leg_type, fingers=self.fingers, thumb=self.thumb)
             made.extend(names)
             labels.append(part_label(self.kind, inst, side))
             # Ban tay di kem canh tay: no luon bam vao `Hand_Master` cua chinh
@@ -927,7 +1001,8 @@ class SRP_OT_ref_add(bpy.types.Operator):
             if self.kind == 'ARM' and self.with_hand and names:
                 hand = add_part(context, ref, 'HAND', side=side,
                                 socket=bone_name("Hand_Master", inst, side),
-                                mesh_object=settings.target_mesh)
+                                mesh_object=settings.target_mesh,
+                                fingers=self.fingers, thumb=self.thumb)
                 if hand:
                     made.extend(hand)
                     labels.append(part_label('HAND', inst, side))
@@ -1032,7 +1107,16 @@ class SRP_RefSettings(bpy.types.PropertyGroup):
         name="Tên chuỗi", default="Tail",
         description="Chỉ dùng cho chuỗi bổ trợ. Các đốt sau tự thêm .001, .002")
     chain_count: IntProperty(name="Số xương", default=4, min=1, max=32)
-    with_hand: BoolProperty(name="Kèm bàn tay (20 xương ngón)", default=True)
+    with_hand: BoolProperty(name="Kèm bàn tay", default=True)
+    leg_type: EnumProperty(
+        name="Kiểu chân", items=rigdef.LEG_TYPES, default='HUMAN',
+        description="Chó / thú và dê / móng guốc: chân gập chữ Z, control IK đặt ở chỗ "
+                    "chạm đất. Dựng xong kéo xương ref khớp vào chân thật")
+    fingers: IntProperty(
+        name="Số ngón", default=5, min=1, max=5,
+        description="Tổng số ngón mỗi bàn tay, tính cả ngón cái nếu có")
+    thumb: BoolProperty(name="Có ngón cái", default=True,
+                        description="Tắt nếu mọi ngón đều nằm cùng một hàng")
 
 
 def draw_start(layout, context):
@@ -1068,6 +1152,12 @@ def draw_parts(layout, context):
         box.row(align=True).prop(settings, "side", expand=True)
     if settings.kind == 'ARM':
         box.prop(settings, "with_hand")
+    if settings.kind == 'HAND' or (settings.kind == 'ARM' and settings.with_hand):
+        row = box.row(align=True)
+        row.prop(settings, "fingers")
+        row.prop(settings, "thumb", toggle=True)
+    if settings.kind == 'LEG':
+        box.row(align=True).prop(settings, "leg_type", expand=True)
     if settings.kind == 'CHAIN':
         row = box.row(align=True)
         row.prop(settings, "chain_name", text="")
@@ -1084,6 +1174,9 @@ def draw_parts(layout, context):
     op.chain_name = settings.chain_name
     op.chain_count = settings.chain_count
     op.with_hand = settings.with_hand
+    op.leg_type = settings.leg_type
+    op.fingers = settings.fingers
+    op.thumb = settings.thumb
 
     existing = parts_in(ref)
     if existing:

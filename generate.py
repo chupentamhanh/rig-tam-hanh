@@ -54,9 +54,10 @@ class RefBone:
     tron hai he toa do trong cung mot bieu thuc la loi khong bao gio bao ra.
     """
 
-    __slots__ = ("name", "head", "tail", "z_axis", "parent", "connect")
+    __slots__ = ("name", "head", "tail", "z_axis", "parent", "connect", "leg")
 
-    def __init__(self, name, head, tail, z_axis, parent, connect=False):
+    def __init__(self, name, head, tail, z_axis, parent, connect=False, leg='HUMAN'):
+        self.leg = leg
         self.name = name
         self.head = head
         self.tail = tail
@@ -86,7 +87,7 @@ def snapshot(ref):
         out[bone.name] = RefBone(bone.name, W @ bone.head_local.copy(),
                                  W @ bone.tail_local.copy(), z,
                                  bone.parent.name if bone.parent else None,
-                                 bone.use_connect)
+                                 bone.use_connect, bone.get(refrig.TAG_LEG, 'HUMAN'))
     return out
 
 
@@ -113,6 +114,7 @@ class Plan:
     def __init__(self):
         self.rows = []
         self.names = set()
+        self.tags = {}              # {ten xuong: kieu chan}
 
     def add(self, name, head, tail, parent, connect, deform, collection,
             z_axis=None):
@@ -302,20 +304,33 @@ def build_plan(bones, parts, roll=True):
             _chain(plan, limb.ik, chain, pelvis, "Spare Bones", False, chain)
 
             toe = ref(part, "Toe")
-            if toe is not None:
+            heel = ref(part, "Heel")
+            digi = chain[0].leg != 'HUMAN' and toe is not None and heel is not None
+            if digi:
+                plan.tags[limb.deform[0]] = chain[0].leg
+                # Lan chan: ban chan / mong nam yen tren dat khi hock nhac len.
+                # Xuong dem cung huong `ToeTip` de Copy Rotation o rest bang 0.
+                step = (toe.tail - heel.head).length * 0.35 or 0.05
+                plan.add(limb.toe_mch, toe.head,
+                         toe.head + (heel.head - toe.tail).normalized() * step,
+                         limb.deform[2], False, False, "Spare Bones")
+                plan.add(toe.name, toe.head, toe.tail, limb.toe_mch, False,
+                         True, "Main Controls", toe.z_axis)
+            elif toe is not None:
                 plan.add(toe.name, toe.head, toe.tail, limb.deform[2], True,
                          True, "Main Controls", toe.z_axis)
 
             ankle = chain[2].head
             knee = chain[1].head
-            plan.add(limb.ctrl, ankle, ankle + Vector((0.0, height * 0.08, 0.0)),
+            # Chan thu: control nam o cho CHAM DAT, khong phai o hock giua chung
+            grip = toe.head if digi else ankle
+            plan.add(limb.ctrl, grip, grip + Vector((0.0, height * 0.08, 0.0)),
                      "Root", False, False, word_ik)
             pole = knee + forward * (height * 0.20)           # ra TRUOC goi
             plan.add(limb.pole, pole, pole + Vector((0.0, height * 0.05, 0.0)),
                      limb.ctrl, False, False, word_ik)
 
-            heel = ref(part, "Heel")
-            if roll and heel is not None and toe is not None:
+            if (roll or digi) and heel is not None and toe is not None:
                 _roll_plan(plan, limb, heel.head, ankle, toe.head, toe.tail)
 
     # ------------------------------------- ban tay + chuoi xuong bo tro
@@ -386,6 +401,8 @@ def build_skeleton(context, plan, name="SRP_Rig"):
 
     for pose_bone in rig.pose.bones:
         pose_bone.rotation_mode = 'QUATERNION'
+    for bone_name, leg in plan.tags.items():
+        armature.bones[bone_name][rigdef.TAG_LEG] = leg
 
     # Chuoi IK va bone deform la co cau ben trong, khong phai control.
     for hidden in ("Spare Bones", "Deform Bones"):
@@ -460,7 +477,7 @@ WIDGET_RULES = (
 
 # Co cau ben trong — khong can hinh, va co hinh thi chi che mat control that.
 NO_WIDGET = ("BicepIK", "ForearmIK", "HandIK", "ThighIK", "ShinIK", "FootIK",
-             "Pelvis")
+             "Pelvis", "ToeMch")
 
 
 def _stem(name):

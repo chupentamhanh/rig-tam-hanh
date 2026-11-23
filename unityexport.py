@@ -1002,6 +1002,7 @@ def export(context, arm, folder, name, which='ALL', face_z=True, combine=False,
         mapping = {
             'version': 1, 'character': safe(name), 'keep_extra': not only_human,
             'keep_rest_pose': not tpose,
+            'keep_leg_rest': any(l.is_digitigrade(arm) for l in rigdef.limbs_for(arm)),
             'combined': combined,
             'fps': sc.render.fps / sc.render.fps_base,
             'human': [{'human': h, 'bone': hmap[h]} for h in HUMAN_ORDER if h in hmap],
@@ -1492,15 +1493,15 @@ using UnityEngine;
 public class RigTamHanhHumanoidImporter : AssetPostprocessor
 {
     // v3: dựng Avatar sau khi import xong cả đợt -- file import bằng bản cũ tự dựng lại.
-    const string Marker = "RigTamHanhHumanoid:v3:";
-    public override uint GetVersion() { return 3; }
+    const string Marker = "RigTamHanhHumanoid:v4:";
+    public override uint GetVersion() { return 4; }
 
     [System.Serializable] public class Pair { public string human; public string bone; }
     [System.Serializable] public class Clip { public string name; public bool loop; public int first; public int last; public bool face; public int start; public string file; }
     [System.Serializable] public class Map
     {
         public int version; public string character; public bool keep_extra; public bool combined; public float fps;
-        public bool keep_rest_pose;
+        public bool keep_rest_pose; public bool keep_leg_rest;
         public Pair[] human; public Clip[] clips; public string[] sets;
     }
 
@@ -1569,7 +1570,7 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
 
     // Đưa cây transform về T-pose: chỉ xoay quanh đầu xương, theo thứ tự cha
     // trước con, nên chiều dài xương và mọi thứ khác giữ nguyên.
-    static void EnforceTPose(Dictionary<string, Transform> H)
+    static void EnforceTPose(Dictionary<string, Transform> H, bool keepLegs)
     {
         System.Func<string, Transform> T = n => H.TryGetValue(n, out var t) ? t : null;
         Transform lu = T("LeftUpperArm"), ru = T("RightUpperArm");
@@ -1587,6 +1588,8 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
                 Align(T(side + " " + f + " Proximal"), T(side + " " + f + " Intermediate"), dir);
                 Align(T(side + " " + f + " Intermediate"), T(side + " " + f + " Distal"), dir);
             }
+            // Chan cho / de von gap chu Z: duoi thang la Avatar sai dang chan.
+            if (keepLegs) continue;
             Align(T(side + "UpperLeg"), T(side + "LowerLeg"), Vector3.down);
             Align(T(side + "LowerLeg"), T(side + "Foot"), Vector3.down);
         }
@@ -1628,7 +1631,7 @@ public class RigTamHanhHumanoidImporter : AssetPostprocessor
                 human.Add(hb);
                 H[p.human] = t;
             }
-            if (!map.keep_rest_pose) EnforceTPose(H);
+            if (!map.keep_rest_pose) EnforceTPose(H, map.keep_leg_rest);
             var skeleton = all.Select(t => new SkeletonBone
             {
                 name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale

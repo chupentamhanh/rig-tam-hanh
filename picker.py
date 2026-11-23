@@ -500,6 +500,9 @@ def draw_hand(layout, context, rig):
 
         column.separator()
         for label, base in FINGER_ROWS:
+            # Ban tay it ngon: khong ve hang cua ngon khong co
+            if not any(finger_bones(rig, base, s, inst) for s in ('R', 'L')):
+                continue
             row = column.row(align=True)
             for side in ('R', 'L'):
                 _pick(row.column(align=True), rig, label,

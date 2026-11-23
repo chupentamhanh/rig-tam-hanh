@@ -181,6 +181,9 @@ HELP = {
         "Ô xương cha để trống thì nối vào chỗ mặc định của bộ phận.",
         "L → R / R → L: chép đối xứng vị trí xương ref.",
         "`Heel` chỉ lấy VỊ TRÍ ĐẦU, hướng không dùng tới.",
+        "Chân: chọn Người / Chó / Dê. Chó, dê: Foot là đoạn từ cổ chân sau xuống,",
+        "Toe là bàn chân / móng, control IK ở chỗ chạm đất; xoay Ball để nhấc cổ chân.",
+        "Tay / bàn tay: chọn số ngón (1-5) và có ngón cái hay không.",
     )),
     'skeleton': ("4 · Dựng rig + widget", (
         "Dựng xương + control + widget, đấu dây và đo lại pole trong một bước.",

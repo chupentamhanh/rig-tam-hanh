@@ -130,10 +130,19 @@ def _facing(arm, m):
     return Vector((0, -1, 0))
 
 
+def _digi(arm, m):
+    """Rig co chan di bang ngon / mong (ghi tren xuong dui)."""
+    b = arm.data.bones.get(m.get('LeftUpperLeg', ''))
+    return b is not None and b.get(rigdef.TAG_LEG, 'HUMAN') != 'HUMAN'
+
+
 def _hip_height(arm, m):
     """Độ cao hông trên bàn chân lúc nghỉ (thế giới)."""
     hip = (arm.matrix_world @ arm.data.bones[m['Hips']].head_local).z
-    feet = [(arm.matrix_world @ arm.data.bones[m[k]].head_local).z for k in ('LeftFoot', 'RightFoot') if k in m]
+    keys = ('LeftFoot', 'RightFoot')
+    if _digi(arm, m) and 'LeftToes' in m and 'RightToes' in m:
+        keys = ('LeftToes', 'RightToes')     # chan thu: `Foot` bat dau o hock, cao hon dat
+    feet = [(arm.matrix_world @ arm.data.bones[m[k]].head_local).z for k in keys if k in m]
     return hip - (min(feet) if feet else 0.0)
 
 
@@ -182,12 +191,14 @@ def solve(src, tgt, pr, poses, in_place=False, scale_root=True):
         k = _hip_height(tgt, tm) / hs if hs > 1e-6 else 1.0
     fk_of = _write_bones(tgt)
     B = tgt.data.bones
+    digi_t = _digi(tgt, tm)
     # lúc nghỉ
     rest = {}
     for h, s, t in pr:
         Rs = _rot(Y @ _rest_world(src, s))
         Rt = _rot(_rest_world(tgt, t))
-        if h in AXIAL:
+        # Chan thu gap chu Z: nan thang theo chan nguoi la mat dang chan. Chep do xoay.
+        if h in AXIAL or (digi_t and h.endswith(('UpperLeg', 'LowerLeg', 'Foot', 'Toes'))):
             A = Quaternion()
         else:                                 # chi: nắn tư thế nghỉ (A-pose / T-pose)
             A = (yaw @ _dir(src, sm, h, s)).rotation_difference(_dir(tgt, tm, h, t))

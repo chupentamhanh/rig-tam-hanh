@@ -7,6 +7,25 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.33.0 — 2026-11-23
+
+**Kiểu chân (Người / Chó / Dê) và số ngón tay.**
+- Chân thú giữ ba tên Thigh-Shin-Foot + Toe: `Foot` là đoạn bàn từ cổ chân sau,
+  `Toe` là bàn chân / móng. Nhờ vậy FK/IK, weight, retarget, Humanoid đi chung
+  đường với chân người; rig chân người không đổi.
+- Control `LegIK` đặt ở chỗ chạm đất. Xương đệm `ToeMch` giữ bàn chân / móng yên
+  khi xoay `Ball` để nhấc cổ chân sau (đo: móng xoay < 0.5°, dịch < 1 mm).
+- Snap IK theo FK cho chân thú: đặt cả ma trận control theo `FootFK` (lệch < 1 mm,
+  < 1°). Dựng lại ref từ rig giữ kiểu chân.
+- Retarget: chân thú chép độ xoay, không nắn theo chân người, nên giữ dáng chữ Z;
+  tỉ lệ hông đo tới chỗ chạm đất.
+- Unity: không duỗi thẳng chân thú trong T-pose của Avatar (`keep_leg_rest`). Script
+  import v4. Đo trên Krampus, Rake, Unity 2022.3 và 6000.3: Humanoid hợp lệ, dáng
+  chân lệch 0.00°, tay vẫn ngang.
+- Bàn tay 1-5 ngón, có / không ngón cái; ngón còn lại giãn đều. Picker ẩn hàng ngón
+  không có.
+- Test mới: `limb_types` (36 mục).
+
 ## 1.32.0 — 2026-11-18
 
 **Retarget animation** (`retarget.py`, panel *Retarget animation* ở khu Diễn).

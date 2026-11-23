@@ -174,6 +174,9 @@ def ref_from_rig(context, rig, name=None):
         bone[refrig.TAG_INST] = inst
         bone[refrig.TAG_SIDE] = side or ""
         bone[refrig.TAG_BASE] = base
+        if kind == 'LEG':
+            thigh = rig.data.bones.get(refrig.bone_name("Thigh", inst, side))
+            bone[refrig.TAG_LEG] = thigh.get(rigdef.TAG_LEG, 'HUMAN') if thigh else 'HUMAN'
     refrig.store_baseline(ref)
     return ref, len(table)
 

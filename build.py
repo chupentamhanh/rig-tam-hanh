@@ -149,6 +149,29 @@ def ensure_tip_follow(rig, limb, changes):
     return len(made)
 
 
+def ensure_digi_toe(rig, limb, changes):
+    """Chan thu: o IK, ban chan / mong giu huong theo `ToeTip`.
+
+    Nhac hock (xoay `Ball`) la doan ban `Foot` quay quanh cho cham dat. `Toe` la
+    con cua no nen se cam xuong dat neu khong co xuong dem nay.
+    """
+    if not limb.is_digitigrade(rig) or not limb.has_roll(rig):
+        return None
+    bone = rig.pose.bones.get(limb.toe_mch)
+    if bone is None:
+        return None
+    con = bone.constraints.get("Toe_Plant")
+    if con is None:
+        con = bone.constraints.new('COPY_ROTATION')
+        con.name = "Toe_Plant"
+        con.target = rig
+        con.subtarget = limb.roll[1]
+        con.target_space = con.owner_space = BLEND_SPACE
+        con.mix_mode = 'REPLACE'
+        changes.add("%s: toe bam dat" % limb.label)
+    return con
+
+
 # ------------------------------------------------------- ten constraint
 
 def rename_constraints(rig, limb, changes):
@@ -316,6 +339,8 @@ def apply_logic(context, rig):
         ensure_tip_follow(rig, limb, changes)
         rename_constraints(rig, limb, changes)
         rebuild_drivers(rig, limb, changes)
+        if ensure_digi_toe(rig, limb, changes) is not None:
+            add_switch_driver(rig, limb, limb.toe_mch, "Toe_Plant", inverted=False)
         rebuild_collection_drivers(rig, limb, changes)
     rig.data.update_tag()
     compat.refresh(context, rig)
