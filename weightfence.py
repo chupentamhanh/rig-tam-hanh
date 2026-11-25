@@ -542,10 +542,32 @@ def localize(ob, rig, smooth=True):
     groin = (sum(t.head_local.z + t.tail_local.z for t in thighs) / (2 * len(thighs))
              if thighs else None)
 
+    # Đáy bàn chân người chỉ thuộc bàn chân: da gót mà còn ăn ống chân thì lăn gót
+    # là gót nhấc khỏi sàn (Mothman: đáy gót 36% Shin, nhấc 28 mm).
+    soles = {}                      # vùng chân -> (Shin, Foot, độ cao cắt)
+    for l in rigdef.limbs_for(rig):
+        if l.kind != 'LEG' or l.is_digitigrade(rig) or len(l.deform) < 3 \
+                or any(n not in B for n in l.deform):
+            continue
+        foot = B[l.deform[2]]
+        ends = [foot.tail_local.z] + ([B[l.toe].head_local.z, B[l.toe].tail_local.z]
+                                      if l.toe in B else [])
+        floor = min(ends)
+        ankle = foot.head_local.z
+        if ankle > floor:
+            soles['Leg.' + l.side] = (l.deform[1], l.deform[2], floor + 0.5 * (ankle - floor))
+
+    def on_sole(i):
+        s = soles.get(region[i])
+        return s if s is not None and C[i].z < s[2] else None
+
     def allowed_part(i, w):
         keep, z_home = {}, home[i]
         mine = owner.get(label[i])
+        sole = on_sole(i)
         for k, x in w.items():
+            if sole is not None and k == sole[0]:
+                continue
             side = _bone_side(k)
             dx = C[i].x - mid
             own = lay.region.get(k) or ""
@@ -580,6 +602,8 @@ def localize(ob, rig, smooth=True):
 
     def clean(i, w):
         keep, z_home = allowed_part(i, w), home[i]
+        if not keep and on_sole(i) is not None:
+            keep = {on_sole(i)[1]: 1.0}
         if not keep:
             pool = [n for n, z in zones.items() if z == z_home] if z_home else [lead[i]]
             keep = {_nearest_bone(rig, pool, C[i]): 1.0}

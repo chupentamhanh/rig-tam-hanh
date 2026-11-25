@@ -174,7 +174,9 @@ def _roll_plan(plan, limb, heel, ankle, toe, toe_end):
              limb.ctrl, False, False, collection)
     plan.add(names[1], toe_end, toe_end + (heel - toe_end).normalized() * step,
              names[0], False, False, collection)
-    plan.add(names[2], toe, toe + (toe_end - toe).normalized() * step,
+    # `Ball` cung chieu `ToeTip` (chi ve got): xoay duong o ca hai deu la nhac
+    # got. Truoc day Ball chi ve mui nen phai xoay AM moi nhac got.
+    plan.add(names[2], toe, toe + (heel - toe_end).normalized() * step,
              names[1], False, False, collection)
     plan.add(names[3], ankle, ankle + Vector((0.0, 0.0, step)),
              names[2], False, False, "Spare Bones")
@@ -309,8 +311,9 @@ def build_plan(bones, parts, roll=True):
             digi = chain[0].leg != 'HUMAN' and toe is not None and heel is not None
             if digi:
                 plan.tags[limb.deform[0]] = chain[0].leg
-                # Lan chan: ban chan / mong nam yen tren dat khi hock nhac len.
-                # Xuong dem cung huong `ToeTip` de Copy Rotation o rest bang 0.
+            # Lan chan: ngon / mong nam yen tren dat khi nhac got (nguoi) hay hock
+            # (thu). Xuong dem cung huong `ToeTip` de Copy Rotation o rest bang 0.
+            if (roll or digi) and toe is not None and heel is not None:
                 step = (toe.tail - heel.head).length * 0.35 or 0.05
                 plan.add(limb.toe_mch, toe.head,
                          toe.head + (heel.head - toe.tail).normalized() * step,

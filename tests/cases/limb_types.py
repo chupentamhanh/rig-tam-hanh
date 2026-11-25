@@ -169,4 +169,81 @@ rep("retarget frame đầu: chân dê giữ nguyên dáng nghỉ", kn.length < 2
     "gối %.2f mm, hock %.2f mm" % (kn.length * 1000, hk.length * 1000))
 sc.frame_set(12)
 rep("retarget: đùi chuyển động", (head(rig, LT.deform[2]) - (rig.matrix_world @ b[LT.deform[2]].head_local)).length > 0.02)
+# ---- foot roll chân người: ngón bám đất, Ball cùng chiều ToeTip
+from rig_tam_hanh import build as BU
+human = results_rigs['HUMAN'][1]
+HL = next(l for l in rigdef.limbs_for(human) if l.kind == 'LEG' and l.side == 'L')
+rep("chân người có xương giữ ngón", HL.toe_mch in human.data.bones and human.data.bones[HL.toe].parent.name == HL.toe_mch)
+
+
+def tail_of(rig, n):
+    ctx.view_layer.update()
+    return (rig.matrix_world @ rig.evaluated_get(ctx.evaluated_depsgraph_get()).pose.bones[n].tail).copy()
+
+
+def roll_test(rig, L, name, deg):
+    reset(rig)
+    L.set_switch(rig, 1.0)
+    ank0, toe0, tip0, q0 = head(rig, L.deform[2]), head(rig, L.toe), tail_of(rig, L.toe), rot(rig, L.toe)
+    pb = rig.pose.bones[name]
+    pb.rotation_quaternion = Matrix.Rotation(math.radians(deg), 3, 'X').to_quaternion()
+    ctx.view_layer.update()
+    out = (head(rig, L.deform[2]) - ank0, head(rig, L.toe) - toe0, tail_of(rig, L.toe) - tip0,
+           (lambda a: min(a, 360 - a))(math.degrees(q0.rotation_difference(rot(rig, L.toe)).angle)))  # q và -q là một
+    reset(rig)
+    return out
+
+
+ank, ball, tip, turned = roll_test(human, HL, HL.roll[2], 25)
+rep("Ball +25°: nhấc gót", ank.z > 0.01, "cổ chân %+.1f mm" % (ank.z * 1000))
+rep("Ball +25°: ngón nằm yên trên đất", ball.length < 1e-3 and tip.length < 1e-3 and turned < 0.5,
+    "ức %.1f mm, mũi %.1f mm, xoay %.2f°" % (ball.length * 1000, tip.length * 1000, turned))
+ank2, _b, _t, _r = roll_test(human, HL, HL.roll[1], 20)
+rep("ToeTip +20° cũng nhấc gót (cùng chiều Ball)", ank2.z > 0.01, "%+.1f mm" % (ank2.z * 1000))
+reset(human)
+HL.set_switch(human, 0.0)
+q0 = rot(human, HL.toe)
+pb = human.pose.bones[HL.fk[2]]
+pb.rotation_quaternion = Matrix.Rotation(math.radians(30), 3, 'X').to_quaternion()
+ctx.view_layer.update()
+rep("FK: ngón đi theo bàn chân", abs(math.degrees(q0.rotation_difference(rot(human, HL.toe)).angle) - 30) < 0.5)
+reset(human)
+HL.set_switch(human, 1.0)
+
+# ---- nâng cấp rig dựng từ bản cũ: animation Ball cũ giữ nguyên chuyển động
+old = make("Rig_Old", 'HUMAN', 5)[1]
+ctx.view_layer.objects.active = old
+bpy.ops.object.mode_set(mode='EDIT')
+E = old.data.edit_bones
+for side in 'LR':
+    L = next(l for l in rigdef.limbs_for(old) if l.kind == 'LEG' and l.side == side)
+    toe, ball = E[L.toe], E[L.roll[2]]
+    toe.parent = E[L.deform[2]]
+    toe.use_connect = True
+    E.remove(E[L.toe_mch])
+    z = ball.z_axis.copy()
+    ball.tail = ball.head - (ball.tail - ball.head)
+    ball.align_roll(z)
+bpy.ops.object.mode_set(mode='OBJECT')
+OL = next(l for l in rigdef.limbs_for(old) if l.kind == 'LEG' and l.side == 'L')
+rep("rig cũ được nhận ra cần nâng cấp", BU.needs_feet_upgrade(old))
+act = bpy.data.actions.new("OldRoll")
+old.animation_data_create().action = act
+reset(old)
+OL.set_switch(old, 1.0)
+pbo = old.pose.bones[OL.roll[2]]
+pbo.rotation_mode = 'QUATERNION'
+for f, deg in ((1, 0), (10, -25)):
+    pbo.rotation_quaternion = Matrix.Rotation(math.radians(deg), 3, 'X').to_quaternion()
+    pbo.keyframe_insert("rotation_quaternion", frame=f)
+sc.frame_set(10)
+ank_old = head(old, OL.deform[2])
+ch = BU.upgrade_feet(ctx, old)
+sc.frame_set(1)
+sc.frame_set(10)
+OL = next(l for l in rigdef.limbs_for(old) if l.kind == 'LEG' and l.side == 'L')
+rep("nâng cấp: thêm xương giữ ngón, đảo Ball", not BU.needs_feet_upgrade(old) and OL.toe_mch in old.data.bones, ch.summary()[:120])
+rep("nâng cấp: animation Ball cũ vẫn nhấc gót y như trước", (head(old, OL.deform[2]) - ank_old).length < 1e-4,
+    "lệch %.3f mm" % ((head(old, OL.deform[2]) - ank_old).length * 1000))
+rep("nâng cấp: FK/IK vẫn chuyển được", not build.verify_switching(ctx, old))
 print("TỔNG %d/%d" % (sum(results), len(results)))

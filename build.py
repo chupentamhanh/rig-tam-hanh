@@ -150,12 +150,13 @@ def ensure_tip_follow(rig, limb, changes):
 
 
 def ensure_digi_toe(rig, limb, changes):
-    """Chan thu: o IK, ban chan / mong giu huong theo `ToeTip`.
+    """O IK, ngon chan / mong giu huong theo `ToeTip` (moi kieu chan co foot roll).
 
-    Nhac hock (xoay `Ball`) la doan ban `Foot` quay quanh cho cham dat. `Toe` la
-    con cua no nen se cam xuong dat neu khong co xuong dem nay.
+    Xoay `Ball` de nhac got la ca ban `Foot` quay quanh uc ban chan. `Toe` la con
+    cua no nen se cam xuong dat neu khong co xuong dem nay: do tren Mothman ngon
+    cam sau 107 mm khi `Ball` 25 do.
     """
-    if not limb.is_digitigrade(rig) or not limb.has_roll(rig):
+    if not limb.has_roll(rig):
         return None
     bone = rig.pose.bones.get(limb.toe_mch)
     if bone is None:
@@ -460,4 +461,150 @@ class SRP_OT_ik_stretch(bpy.types.Operator):
         return {'FINISHED'}
 
 
-CLASSES = (SRP_OT_apply_logic, SRP_OT_ik_stretch)
+# ------------------------------------------------- nang cap chan rig cu
+
+def _feet_todo(rig):
+    """[(limb, can xuong giu ngon, can dao chieu Ball)] cho rig dung tu ban cu."""
+    B = rig.data.bones
+    out = []
+    for limb in rigdef.limbs_for(rig):
+        if limb.kind != 'LEG' or not limb.has_roll(rig) or limb.toe not in B:
+            continue
+        tip, ball = B[limb.roll[1]], B[limb.roll[2]]
+        flip = (ball.tail_local - ball.head_local).dot(tip.tail_local - tip.head_local) < 0
+        need_mch = limb.toe_mch not in B
+        if flip or need_mch:
+            out.append((limb, need_mch, flip))
+    return out
+
+
+def needs_feet_upgrade(rig):
+    return bool(_feet_todo(rig))
+
+
+def _flip_ball_keys(rig, names):
+    """Ball quay 180 do quanh truc Z cuc bo: x, y cua xoay va dich doi dau."""
+    paths = {'pose.bones["%s"].%s' % (n, p): idx for n in names
+             for p, idx in (("rotation_quaternion", (1, 2)), ("rotation_euler", (0, 1)),
+                            ("location", (0, 1)))}
+    actions = set()
+    anim = rig.animation_data
+    if anim is not None:
+        if anim.action is not None:
+            actions.add(anim.action)
+        for track in anim.nla_tracks:
+            for strip in track.strips:
+                if strip.action is not None:
+                    actions.add(strip.action)
+    # File chi co mot rig mang ten xuong nay: action de rieng (fake user) cung la cua no
+    owners = [o for o in bpy.data.objects if o.type == 'ARMATURE'
+              and any(n in o.data.bones for n in names)]
+    if owners == [rig]:
+        actions.update(bpy.data.actions)
+    flipped = 0
+    for action in actions:
+        for fcurve in compat.action_fcurves(action):
+            idx = paths.get(fcurve.data_path)
+            if idx is None or fcurve.array_index not in idx:
+                continue
+            for key in fcurve.keyframe_points:
+                key.co.y = -key.co.y
+                key.handle_left.y = -key.handle_left.y
+                key.handle_right.y = -key.handle_right.y
+            fcurve.update()
+            flipped += 1
+    for n in names:
+        pb = rig.pose.bones[n]
+        q = pb.rotation_quaternion
+        pb.rotation_quaternion = (q[0], -q[1], -q[2], q[3])
+        e = pb.rotation_euler
+        pb.rotation_euler = (-e[0], -e[1], e[2])
+        loc = pb.location
+        pb.location = (-loc[0], -loc[1], loc[2])
+    return flipped
+
+
+def upgrade_feet(context, rig):
+    """Rig chan nguoi dung tu ban truoc 1.37.1: them xuong giu ngon bam dat va dao
+    chieu `Ball` cho cung chieu `ToeTip` (xoay duong la nhac got). Animation cu cua
+    `Ball` duoc doi dau theo de chuyen dong giu nguyen. Tra ve Change."""
+    changes = Change()
+    todo = _feet_todo(rig)
+    if not todo:
+        return changes
+    mode = context.mode
+    active = context.view_layer.objects.active
+    hidden = rig.hide_get()
+    if mode != 'OBJECT':
+        bpy.ops.object.mode_set(mode='OBJECT')
+    rig.hide_set(False)
+    context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode='EDIT')
+    try:
+        edit = rig.data.edit_bones
+        for limb, need_mch, flip in todo:
+            tip, ball, toe = edit[limb.roll[1]], edit[limb.roll[2]], edit[limb.toe]
+            back = (tip.tail - tip.head).normalized()
+            if flip:
+                z = ball.z_axis.copy()
+                ball.tail = ball.head + back * ball.length
+                ball.align_roll(z)
+                changes.add("%s: đảo chiều %s" % (limb.label, ball.name))
+            if need_mch:
+                mch = edit.new(limb.toe_mch)
+                mch.head = toe.head.copy()
+                mch.tail = toe.head + back * max(tip.length, 1e-3)
+                mch.align_roll(tip.z_axis)
+                mch.use_deform = False
+                mch.parent = edit[limb.deform[2]]
+                toe.use_connect = False
+                toe.parent = mch
+                changes.add("%s: thêm %s giữ ngón bám đất" % (limb.label, limb.toe_mch))
+    finally:
+        bpy.ops.object.mode_set(mode='OBJECT')
+    spare = rig.data.collections_all.get("Spare Bones")
+    for limb, need_mch, flip in todo:
+        if need_mch:
+            if spare is not None:
+                spare.assign(rig.data.bones[limb.toe_mch])
+            rig.pose.bones[limb.toe_mch].rotation_mode = 'QUATERNION'
+    balls = [limb.roll[2] for limb, _m, flip in todo if flip]
+    if balls:
+        n = _flip_ball_keys(rig, balls)
+        if n:
+            changes.add("đổi dấu %d đường cong animation của Ball" % n)
+    for line in apply_logic(context, rig).items:
+        changes.add(line)
+    rig.hide_set(hidden)
+    if active is not None:
+        context.view_layer.objects.active = active
+    if mode == 'POSE' and active is rig:
+        bpy.ops.object.mode_set(mode='POSE')
+    return changes
+
+
+class SRP_OT_upgrade_feet(bpy.types.Operator):
+    """Rig chân người dựng từ bản cũ: thêm xương giữ ngón chân bám đất khi nhấc gót
+    bằng Ball, và đảo chiều Ball cho cùng chiều ToeTip (xoay dương là nhấc gót).
+    Animation cũ của Ball được đổi theo để chuyển động giữ nguyên"""
+    bl_idname = "srp.upgrade_feet"
+    bl_label = "Nâng cấp foot roll"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        rig = rigdef.active_rig(context)
+        return rig is not None and needs_feet_upgrade(rig)
+
+    def execute(self, context):
+        rig = rigdef.active_rig(context)
+        changes = upgrade_feet(context, rig)
+        failures = verify_switching(context, rig)
+        if failures:
+            self.report({'ERROR'}, "Nâng cấp xong nhưng FK↔IK hỏng: %s" % failures[0])
+            return {'FINISHED'}
+        self.report({'INFO'}, "%s: %s" % (rig.name, changes.summary()))
+        return {'FINISHED'}
+
+
+CLASSES = (SRP_OT_apply_logic, SRP_OT_ik_stretch, SRP_OT_upgrade_feet)

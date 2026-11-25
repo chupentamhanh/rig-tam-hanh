@@ -7,6 +7,20 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.37.1 — 2026-11-25
+
+**Sửa foot roll chân người.**
+- Thêm xương `ToeMch` giữ ngón bám đất (như chân thú): ở IK, nhấc gót bằng `Ball` thì ngón
+  nằm phẳng; ở FK ngón vẫn theo bàn chân. Đo trên Mothman: trước đó ngón cắm 107 mm, giờ mũi
+  chân đứng yên 0 mm.
+- `Ball` cùng chiều `ToeTip`: xoay dương ở cả hai là nhấc gót (trước đây Ball phải xoay âm).
+- Nút *Nâng cấp foot roll* (Sửa & kiểm tra → Driver & rig logic) cho rig dựng từ bản cũ: thêm
+  `ToeMch`, đảo `Ball`, đổi dấu key cũ của Ball để chuyển động giữ nguyên (đo: lệch 0 mm).
+- Khu trú weight: đáy bàn chân người chỉ thuộc `Foot` (bỏ `Shin`). Mothman: đáy gót 36% Shin
+  -> 0, lăn gót thì da gót nhấc 28 mm -> 0.
+- Còn lại: nhấc gót bằng Ball, da ngay trước ức bàn chân lún khoảng 36 mm do weight `Foot`.
+- Test `limb_types` thêm 9 mục (45).
+
 ## 1.37.0 — 2026-11-25
 
 **Khu trú weight và tự dọn marker.**

@@ -12,7 +12,7 @@ co nut "?" tren dau, noi dung o `uikit.HELP`.
 
 import bpy
 
-from . import (cloth, face, facebendy, fitref, generate, health, markers, onion, picker, posekey, prefs, refrig,
+from . import (build, cloth, face, facebendy, fitref, generate, health, markers, onion, picker, posekey, prefs, refrig,
                remap, retarget, rigdef, uikit, unityexport, ux, weightfence, widgets)
 
 
@@ -511,6 +511,9 @@ class SRP_PT_repair_logic(_NeedRig, bpy.types.Panel):
         op.scope, op.verify = 'ALL', True
         op = row.operator("srp.apply_logic", text="Chỉ rig đang chọn")
         op.scope, op.verify = 'ACTIVE', True
+        rig = rigdef.active_rig(context)
+        if rig is not None and build.needs_feet_upgrade(rig):
+            self.layout.operator("srp.upgrade_feet", icon='ERROR')
 
 
 class SRP_PT_repair_weights(_NeedRig, bpy.types.Panel):

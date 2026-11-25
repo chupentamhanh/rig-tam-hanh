@@ -136,6 +136,9 @@ weight mặt chính xác và bước 7 dựng shape key.
   Z: `Thigh` → gối ra trước → `Shin` → cổ chân sau ra sau → `Foot` (đoạn bàn dài) → `Toe` (bàn
   chân hoặc móng). Control `LegIK` nằm ở chỗ chạm đất; xoay `Ball` để nhấc cổ chân sau, bàn chân
   / móng vẫn nằm yên trên đất. FK/IK, snap, retarget và Unity Humanoid dùng được như chân người.
+- **Foot roll** (mọi kiểu chân): `Heel` xoay dương là lăn gót, `ToeTip` và `Ball` xoay dương là nhấc
+  gót; ngón / móng nằm yên trên đất. Rig dựng từ bản trước 1.37.1: bấm *Nâng cấp foot roll* ở Sửa &
+  kiểm tra → Driver & rig logic (animation cũ của `Ball` được đổi theo).
 - **Bàn tay**: chọn 1–5 ngón và có ngón cái hay không. Ngón còn lại tự giãn đều trên bàn tay.
 
 Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay trong danh sách rồi thêm lại.
