@@ -149,6 +149,10 @@ Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay tr
 2. Click một marker hoặc chọn khớp trong danh sách ở panel. Khớp không tự nhảy.
 3. Giữ và kéo để dời. Ctrl+click: đưa khớp đang chọn tới đó, vào giữa thịt (Ctrl+Shift: trên da).
    Chuột phải: lùi. Đặt các khớp chính là đủ, đốt giữa tự chia và vẫn kéo được.
+   Snapping của Blender dùng được như khi G: bật nam châm, chọn Snap To trên header (Increment,
+   Grid, Vertex, Edge, Face, Volume, Edge Center / Perpendicular, Face Center / Nearest, cùng
+   Absolute Grid, Backface Culling, Peel Object). Đang kéo, giữ Ctrl để đảo snap, Shift cho
+   bước mịn. Click đặt khớp và vẽ chuỗi cũng rơi vào điểm snap.
 4. Bộ phận nghiêng: *Căn cả chuỗi vào giữa thịt*, *Trục gập theo chuỗi*, rồi xoay roll nếu cần
    (đỏ X là trục gập, xanh Z).
 5. Tai, đuôi, cánh, tóc, áo: bấm nút ở *Thêm chuỗi xương*, click từ gốc ra ngọn, **Enter**. Chỉ

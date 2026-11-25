@@ -7,6 +7,24 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.38.0 — 2026-11-25
+
+**Snapping của Blender trong chế độ đặt marker.**
+- Trước đây chế độ marker nuốt mọi click trên header (không bật được nam châm, không mở được
+  Snap To) và kéo marker chỉ trượt trên mặt phẳng nhìn. Giờ header, Shift+Tab, Shift+Ctrl+Tab
+  đi qua bình thường; đổi mode từ header thì chế độ marker tạm dừng, marker giữ nguyên.
+- `snapping.py` làm lại snapping theo đúng cài đặt của scene trên các mesh đang hiện:
+  Increment, Grid, Vertex, Edge, Face (Project), Volume, Edge Center, Edge Perpendicular,
+  Face Center, Face Nearest, cùng Absolute Grid Snap, Backface Culling, Include
+  Non-Selectable, Snap Peel Object, số bước Face Nearest.
+- Kéo marker: giữ Ctrl đảo bật / tắt snap như khi G, Shift bước Increment mịn 10 lần; bước
+  lưới theo zoom (ortho). Ctrl+click và vẽ chuỗi cũng rơi vào điểm snap; vẽ chuỗi có vòng
+  xem trước. Solid: không bắt đỉnh / cạnh bị che; điểm trước / sau trùng nhau trên màn hình
+  thì lấy điểm gần mắt.
+- Số đo: bài test `snapping` 28/28, thử chuột mô phỏng 10/10 (kéo rơi đúng đỉnh, Ctrl không
+  bắt, vẽ chuỗi bắt cạnh trước, tắt snap kéo tự do như cũ). Trên Mothman (2.200 đỉnh): dựng
+  dữ liệu 8 ms, mỗi lần bắt dưới 8 ms.
+
 ## 1.37.1 — 2026-11-25
 
 **Sửa foot roll chân người.**

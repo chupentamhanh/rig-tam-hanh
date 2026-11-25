@@ -181,6 +181,8 @@ HELP = {
         "Click một marker, hoặc chọn khớp trong danh sách ở panel. Khớp không tự nhảy.",
         "Giữ và kéo: dời khớp. Ctrl+click: đưa khớp đang chọn tới đó, vào giữa thịt.",
         "Ctrl+Shift+click: đưa tới đó nhưng nằm trên da. Chuột phải: lùi một bước.",
+        "Snapping của Blender dùng được: nút nam châm, menu Snap To trên header, Shift+Tab.",
+        "Đang kéo: giữ Ctrl để đảo bật / tắt snap, Shift cho bước Increment mịn hơn.",
         "Đặt các khớp chính là đủ, các đốt giữa tự chia và vẫn kéo lại được.",
         "Enter: ghi vào bộ ref và thoát. Esc: tạm dừng, lần sau chỉnh tiếp.",
         "Xoay, zoom viewport như bình thường. Trong lúc này không chọn được object khác.",
