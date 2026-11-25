@@ -7,6 +7,17 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.38.2 — 2026-11-25
+
+**Mọi pie menu dùng được trong chế độ đặt marker.**
+- Lúc vào chế độ marker, add-on đọc keymap người dùng (3D View, Object Mode) và cho mọi phím
+  gọi `wm.call_menu_pie` đi qua: mặc định là ` (View), Shift+S (Snap), . (Pivot),
+  , (Orientation), Shift+O (Proportional Falloff), cùng pie của add-on khác hoặc phím đã đổi.
+  Khớp đúng modifier (kể cả "Any").
+- Menu thường (Shift+A, M, Ctrl+A, Ctrl+L...) vẫn bị chặn vì sửa dữ liệu. Phím riêng của chế
+  độ marker (Enter, Esc, chuột trái / phải, Ctrl+Z) không nhường cho pie nào.
+- Số đo: bài test `markers` thêm 6 mục; trên Blender đang mở `pie_keys` tìm đủ 6 pie mặc định.
+
 ## 1.38.1 — 2026-11-25
 
 **Phím Z dùng được trong chế độ đặt marker.**

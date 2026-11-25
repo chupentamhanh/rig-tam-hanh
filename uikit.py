@@ -186,7 +186,7 @@ HELP = {
         "Đặt các khớp chính là đủ, các đốt giữa tự chia và vẫn kéo lại được.",
         "Enter: ghi vào bộ ref và thoát. Esc: tạm dừng, lần sau chỉnh tiếp.",
         "Xoay, zoom viewport như bình thường. Trong lúc này không chọn được object khác.",
-        "Z / Shift+Z / Alt+Z vẫn đổi shading, wireframe, X-ray như thường.",
+        "Z / Shift+Z / Alt+Z và mọi pie menu (`, Shift+S, . , ,) dùng như thường.",
         "Chọn khớp để xem trục (đỏ X là trục gập, xanh Z) và chỉnh roll ở panel.",
         "Tai, đuôi, cánh, tóc, áo: bấm nút ở mục Thêm chuỗi, click từ gốc ra ngọn, Enter.",
         "Chỉ click gốc và ngọn thì chia đều theo Số đốt. Click nhiều khớp: mỗi click một khớp.",

@@ -326,4 +326,28 @@ rep("Ctrl+Z vẫn là lùi bước đặt marker", not MK.passes_to_blender(_ev(
 rep("phím khác vẫn bị chặn", not any(MK.passes_to_blender(_ev(k), _inp) for k in ('A', 'G', 'X', 'DEL', 'LEFTMOUSE')))
 rep("Shift+Tab, chuột giữa, numpad vẫn tới Blender",
     all(MK.passes_to_blender(e, _inp) for e in (_ev('TAB', shift=True), _ev('MIDDLEMOUSE'), _ev('NUMPAD_5'))))
+# Pie menu theo keymap: keymap gia (nhu mac dinh + mot pie add-on khac + menu thuong)
+def _kmi(t, idname="wm.call_menu_pie", ctrl=0, shift=0, alt=0, active=True, any=False):
+    return _NS(type=t, idname=idname, ctrl=ctrl, shift=shift, alt=alt, oskey=0, active=active, any=any)
+_kc = _NS(keymaps={
+    "3D View": _NS(keymap_items=[_kmi('ACCENT_GRAVE'), _kmi('S', shift=1), _kmi('PERIOD'), _kmi('COMMA'),
+                                 _kmi('Q', alt=1), _kmi('W', active=False), _kmi('F', any=True),
+                                 _kmi('RET'), _kmi('RIGHTMOUSE', shift=1)]),
+    "Object Mode": _NS(keymap_items=[_kmi('O', shift=1), _kmi('A', "wm.call_menu", shift=1),
+                                     _kmi('M', "wm.call_menu")]),
+    "Mesh": _NS(keymap_items=[_kmi('E')]),
+})
+_pies = MK.pie_keys(_kc)
+_pass = lambda *a, **k: MK.passes_to_blender(_ev(*a, **k), _inp, _pies)
+rep("pie mặc định tới Blender: ` Shift+S . , Shift+O",
+    all((_pass('ACCENT_GRAVE'), _pass('S', shift=True), _pass('PERIOD'), _pass('COMMA'), _pass('O', shift=True))))
+rep("pie của add-on khác / phím đã đổi cũng tới (Alt+Q, F bất kỳ modifier)",
+    _pass('Q', alt=True) and _pass('F', ctrl=True, shift=True))
+rep("đúng modifier: S không Shift, Alt+S, Q không Alt vẫn bị chặn",
+    not any((_pass('S'), _pass('S', shift=True, alt=True), _pass('Q'))))
+rep("menu thường (Shift+A, M), pie tắt, keymap mode khác vẫn bị chặn",
+    not any((_pass('A', shift=True), _pass('M'), _pass('W'), _pass('E'))))
+rep("phím riêng của chế độ marker không nhường cho pie (Enter, Shift+chuột phải)",
+    not _pass('RET') and not _pass('RIGHTMOUSE', shift=True))
+rep("keymap không có (chạy nền) thì không lỗi", MK.pie_keys(None) == [])
 print("TỔNG %d/%d" % (sum(results), len(results)))

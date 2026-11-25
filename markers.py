@@ -1493,11 +1493,45 @@ NAV_KEYS = {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN',
             'TRACKPADZOOM', 'MOUSEROTATE', 'MOUSESMARTZOOM', 'HOME'}
 
 
-def passes_to_blender(event, inputs):
+PIE_KEYMAPS = ("3D View", "Object Mode")
+_MODS = ("ctrl", "shift", "alt", "oskey")
+OWN_KEYS = {'RET', 'NUMPAD_ENTER', 'ESC', 'LEFTMOUSE', 'RIGHTMOUSE'}
+
+
+def pie_keys(keyconfig):
+    """Phim dang goi pie menu trong viewport (theo keymap nguoi dung, ke ca add-on khac).
+
+    Tra ve list (type, (ctrl, shift, alt, oskey)); moi modifier la 1 / 0 / -1 (bat ky).
+    Menu thuong (Shift+A, M, Ctrl+A...) khong tinh: chung sua du lieu.
+    """
+    out = []
+    if keyconfig is None:
+        return out
+    for name in PIE_KEYMAPS:
+        km = keyconfig.keymaps.get(name)
+        if km is None:
+            continue
+        for k in km.keymap_items:
+            if k.active and k.idname == 'wm.call_menu_pie':
+                mods = tuple(-1 if getattr(k, "any", False) else int(getattr(k, m)) for m in _MODS)
+                out.append((k.type, mods))
+    return out
+
+
+def _is_pie(event, pies):
+    for kind, mods in pies:
+        if kind == event.type and all(want == -1 or bool(want) == bool(getattr(event, m))
+                                      for want, m in zip(mods, _MODS)):
+            return True
+    return False
+
+
+def passes_to_blender(event, inputs, pies=()):
     """Phim nao trong che do dat marker van de Blender xu ly (khong dong toi du lieu).
 
-    Dieu huong viewport, Ctrl+S, Shift+Tab / Shift+Ctrl+Tab (snap) va Z / Shift+Z /
-    Alt+Z / Shift+Alt+Z (shading, X-ray). Ctrl+Z giu nghia lui mot buoc dat marker.
+    Dieu huong viewport, Ctrl+S, Shift+Tab / Shift+Ctrl+Tab (snap), Z / Shift+Z /
+    Alt+Z / Shift+Alt+Z (shading, X-ray) va moi phim goi pie menu trong `pies`
+    (xem pie_keys). Ctrl+Z giu nghia lui mot buoc dat marker.
     """
     kind = event.type
     if kind in NAV_KEYS or (kind.startswith('NUMPAD') and kind != 'NUMPAD_ENTER'):
@@ -1510,7 +1544,9 @@ def passes_to_blender(event, inputs):
         return True
     if kind == 'Z' and not event.ctrl and not event.oskey:
         return True
-    return False
+    if kind in OWN_KEYS or (kind == 'Z' and event.ctrl):
+        return False    # phim rieng cua che do marker, khong nhuong cho pie nao
+    return _is_pie(event, pies)
 
 
 class SRP_OT_marker_mode(bpy.types.Operator):
@@ -1542,7 +1578,8 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         sync_markers(context, ref, mesh)
         self.tree = mesh_tree(context, mesh) if mesh is not None else None
         self.snapper = snapping.Snapper()
-        ref.hide_set(True)         # xuong ref nam chong len marker, che mat khop
+        self.pies = pie_keys(context.window_manager.keyconfigs.user)
+        ref.hide_set(True)        # xuong ref nam chong len marker, che mat khop
         self._deselect(context)
         guide = guide_of(ref, self.mirror)
         _S.clear()
@@ -1898,7 +1935,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         if self.drag is not None:
             return self._on_drag(context, event, regions)
 
-        if passes_to_blender(event, context.preferences.inputs):
+        if passes_to_blender(event, context.preferences.inputs, self.pies):
             return {'PASS_THROUGH'}
 
         # Panel ben phai cua chinh viewport nay: bam nut, keo thanh roll. Header: nut
