@@ -11,7 +11,7 @@ Xem CHANGELOG.md ben canh file nay: ghi doi gi o ban nao, kem SO DO DUOC.
 bl_info = {
     "name": "Rig Tẩm Hành",
     "author": "Chú Pen Tẩm Hành",
-    "version": (1, 38, 0),
+    "version": (1, 38, 1),
     "blender": (5, 0, 0),
     "location": "View3D > N-Panel > Rig Tẩm Hành",
     "description": "Dựng rig từ bộ xương ref hoặc theo nhân vật mẫu, weight, "

@@ -1489,6 +1489,30 @@ class SRP_OT_marker_cmd(bpy.types.Operator):
         return {'FINISHED'}
 
 
+NAV_KEYS = {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN',
+            'TRACKPADZOOM', 'MOUSEROTATE', 'MOUSESMARTZOOM', 'HOME'}
+
+
+def passes_to_blender(event, inputs):
+    """Phim nao trong che do dat marker van de Blender xu ly (khong dong toi du lieu).
+
+    Dieu huong viewport, Ctrl+S, Shift+Tab / Shift+Ctrl+Tab (snap) va Z / Shift+Z /
+    Alt+Z / Shift+Alt+Z (shading, X-ray). Ctrl+Z giu nghia lui mot buoc dat marker.
+    """
+    kind = event.type
+    if kind in NAV_KEYS or (kind.startswith('NUMPAD') and kind != 'NUMPAD_ENTER'):
+        return True
+    if kind == 'LEFTMOUSE' and event.alt and inputs.use_mouse_emulate_3_button:
+        return True
+    if kind == 'S' and event.ctrl:
+        return True
+    if kind == 'TAB' and event.shift:
+        return True
+    if kind == 'Z' and not event.ctrl and not event.oskey:
+        return True
+    return False
+
+
 class SRP_OT_marker_mode(bpy.types.Operator):
     "Vào chế độ đặt marker. Trong lúc này viewport chỉ nhận marker, không chọn nhầm object khác"
     bl_idname = "srp.marker_mode"
@@ -1874,17 +1898,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         if self.drag is not None:
             return self._on_drag(context, event, regions)
 
-        # Dieu huong viewport luon di qua
-        if kind in {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN',
-                    'TRACKPADZOOM', 'MOUSEROTATE', 'MOUSESMARTZOOM', 'HOME'} \
-                or (kind.startswith('NUMPAD') and kind != 'NUMPAD_ENTER'):
-            return {'PASS_THROUGH'}
-        inputs = context.preferences.inputs
-        if kind == 'LEFTMOUSE' and event.alt and inputs.use_mouse_emulate_3_button:
-            return {'PASS_THROUGH'}
-        if kind == 'S' and event.ctrl:      # Ctrl+S
-            return {'PASS_THROUGH'}
-        if kind == 'TAB' and event.shift:   # Shift+Tab bat snap, Shift+Ctrl+Tab menu Snap To
+        if passes_to_blender(event, context.preferences.inputs):
             return {'PASS_THROUGH'}
 
         # Panel ben phai cua chinh viewport nay: bam nut, keo thanh roll. Header: nut

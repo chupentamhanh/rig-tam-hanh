@@ -7,6 +7,16 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.38.1 — 2026-11-25
+
+**Phím Z dùng được trong chế độ đặt marker.**
+- Chế độ marker chỉ cho một danh sách phím cố định đi qua Blender và nuốt phần còn lại, nên Z
+  (pie menu shading), Shift+Z (wireframe), Alt+Z / Shift+Alt+Z (X-ray) không có tác dụng. Giờ
+  mọi tổ hợp Z không có Ctrl đi qua; Ctrl+Z vẫn là lùi một bước đặt marker. Các phím khác
+  (A, G, X, Delete...) vẫn bị chặn như trước.
+- Danh sách phím đi qua gom vào hàm `passes_to_blender` để test được.
+- Số đo: bài test `markers` thêm 4 mục (100/100), cả bộ 30/30.
+
 ## 1.38.0 — 2026-11-25
 
 **Snapping của Blender trong chế độ đặt marker.**

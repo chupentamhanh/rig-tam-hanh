@@ -315,4 +315,15 @@ off = max((plan[n][2] - z).length for n, z in before_z.items() if plan[n][2] is 
 rep("mở lại: roll không đổi", off < 1e-3, "lệch %.5f" % off)
 generate.drop_ref(ctx)
 rep("bind xoá bộ ref thì marker cũng hết", not any(o.get(MK.TAG_MARKER) for o in bpy.data.objects) and coll_name not in bpy.data.collections)
+# Phim nao trong che do dat marker van den duoc Blender
+from types import SimpleNamespace as _NS
+_inp = _NS(use_mouse_emulate_3_button=False)
+def _ev(t, ctrl=False, shift=False, alt=False):
+    return _NS(type=t, ctrl=ctrl, shift=shift, alt=alt, oskey=False)
+rep("Z / Shift+Z / Alt+Z / Shift+Alt+Z tới Blender (shading, X-ray)",
+    all(MK.passes_to_blender(_ev('Z', shift=s, alt=a), _inp) for s in (False, True) for a in (False, True)))
+rep("Ctrl+Z vẫn là lùi bước đặt marker", not MK.passes_to_blender(_ev('Z', ctrl=True), _inp))
+rep("phím khác vẫn bị chặn", not any(MK.passes_to_blender(_ev(k), _inp) for k in ('A', 'G', 'X', 'DEL', 'LEFTMOUSE')))
+rep("Shift+Tab, chuột giữa, numpad vẫn tới Blender",
+    all(MK.passes_to_blender(e, _inp) for e in (_ev('TAB', shift=True), _ev('MIDDLEMOUSE'), _ev('NUMPAD_5'))))
 print("TỔNG %d/%d" % (sum(results), len(results)))
