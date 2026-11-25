@@ -393,6 +393,234 @@ def fence(ob, rig, smooth=True):
     return len(changed), kept.count()
 
 
+# ============================================================ khu trú
+
+ROOT_BLEND = 0.30       # gốc chuỗi phụ được hoà vào thân trong 0.3 chiều dài đốt đầu
+ISLAND_OWNER = 0.40     # đảo lưới rời thuộc về chuỗi chiếm từ 40% tổng weight
+SIDE_MARGIN = 0.02      # xương .L/.R được qua đường giữa tối đa 2% chiều cao
+
+
+def _seg_dist(co, head, tail):
+    _p, f = intersect_point_line(co, head, tail)
+    return (co - head.lerp(tail, _clamp01(f))).length
+
+
+def _bone_side(name):
+    parts = name.split(".")
+    return next((p for p in parts[1:] if p in ('L', 'R')), None)
+
+
+def _chain_zones(rig):
+    """{xương chuỗi phụ: xương gốc của chuỗi}. Mỗi chuỗi nối liền là một vùng riêng."""
+    out = {}
+    for b in rig.data.bones:
+        if not b.use_deform or not b.get(rigdef.TAG_CHAIN):
+            continue
+        root = b
+        while root.use_connect and root.parent is not None and root.parent.get(rigdef.TAG_CHAIN):
+            root = root.parent
+        out[b.name] = root.name
+    return out
+
+
+def _islands(me, nb):
+    label, sizes = [-1] * len(me.vertices), []
+    for i in range(len(label)):
+        if label[i] >= 0:
+            continue
+        k, stack, n = len(sizes), [i], 0
+        label[i] = k
+        while stack:
+            x = stack.pop()
+            n += 1
+            for y in nb[x]:
+                if label[y] < 0:
+                    label[y] = k
+                    stack.append(y)
+        sizes.append(n)
+    return label, sizes
+
+
+def localize(ob, rig, smooth=True):
+    """Gom weight về đúng bộ phận. Trả về (số vertex đổi, số vertex vẽ tay được giữ).
+
+    Automatic weights tính theo khoảng cách nên xương tai ăn cả da đầu và tai kia.
+    Mỗi vertex được xác định "nhà" (một chuỗi phụ, hoặc thân), rồi chỉ giữ xương:
+    - cùng chuỗi; xương thân / chuỗi cha chỉ được hoà ở sát gốc chuỗi;
+    - với vertex thân: đúng luật vùng đầu / thân / tay / chân;
+    - đúng bên trái / phải, trừ dải sát đường giữa.
+    """
+    B = rig.data.bones
+    lay = Layout(rig)
+    deform = set(lay.deform)
+    if not deform:
+        return 0, 0
+    C = rest_co(ob, rig)
+    rows = weights(ob)
+    W0 = [{k: x for k, x in w.items() if k in deform} for w in rows]
+    hand = cloth.hand_painted(ob)
+    nb = _neighbours(ob.data)
+    label, sizes = _islands(ob.data, nb)
+    main = max(range(len(sizes)), key=sizes.__getitem__) if sizes else -1
+    zones = _chain_zones(rig)
+    zs =[p.z for n in deform for p in (B[n].head_local, B[n].tail_local)]
+    margin = (max(zs) - min(zs)) * SIDE_MARGIN
+    mid = lay.mid[0] if lay.mid is not None else 0.0
+
+    roots = {}                      # vùng -> (đầu xương gốc, bán kính hoà, xương cha)
+    for z in set(zones.values()):
+        b = B[z]
+        up = b.parent
+        while up is not None and not up.use_deform:
+            up = up.parent
+        roots[z] = (b.head_local.copy(), b.length * ROOT_BLEND, up.name if up else None)
+
+    # Đảo lưới rời thuộc về chuỗi nào: xét HÌNH HỌC, không tin weight tự động. Vertex
+    # phải nằm DỌC theo xương chuỗi; nằm phía sau gốc chuỗi thì không tính. Mắt của
+    # Mothman nằm sát gốc râu, tính theo khoảng cách thì 83% mắt thành của râu.
+    names = sorted(deform)
+    H = np.array([tuple(B[n].head_local) for n in names])
+    A = np.array([tuple(B[n].tail_local) for n in names]) - H
+    P = np.array([tuple(c) for c in C])
+    span = np.maximum((A * A).sum(axis=1), 1e-12)
+    rel = P[:, None, :] - H[None, :, :]
+    frac = np.clip((rel * A[None, :, :]).sum(axis=2) / span, 0.0, 1.0)
+    gap = rel - frac[:, :, None] * A[None, :, :]
+    nearest = (gap * gap).sum(axis=2).argmin(axis=1)
+    near_f = frac[np.arange(len(P)), nearest]
+    along = [None] * len(P)         # vùng chuỗi mà vertex thật sự nằm dọc theo
+    for i, (b, f) in enumerate(zip(nearest.tolist(), near_f.tolist())):
+        z = zones.get(names[b])
+        if z is not None and (names[b] != z or f > 0.02):
+            along[i] = z
+    tally = defaultdict(Counter)
+    for i, z in enumerate(along):
+        tally[label[i]][z] += 1
+    owner = {}                      # đảo -> các chuỗi sở hữu (cánh: hai chuỗi chung một đảo)
+    for k, acc in tally.items():
+        size = sizes[k]
+        picked = {z for z, n in acc.items() if z is not None and n / size >= 0.15}
+        share = sum(acc[z] for z in picked) / size
+        owner[k] = picked if k != main and share >= ISLAND_OWNER else set()
+    owned = {z for s in owner.values() for z in s}
+    trunk = [n for n in lay.deform if n not in zones] or lay.deform
+
+    home, region, lead = [None] * len(W0), [None] * len(W0), [None] * len(W0)
+    for i, w in enumerate(W0):
+        if not w:
+            continue
+        s = sum(w.values()) or 1.0
+        acc, reg = Counter(), Counter()
+        for k, x in w.items():
+            if k in zones:
+                acc[zones[k]] += x / s
+            if lay.region.get(k):
+                reg[lay.region[k]] += x
+        mine = owner.get(label[i])
+        if mine:
+            inside = {z: x for z, x in acc.items() if z in mine}
+            if inside:
+                home[i] = max(inside, key=inside.get)
+            else:
+                pool = [n for n, z in zones.items() if z in mine]
+                home[i] = zones[_nearest_bone(rig, pool, C[i])]
+        elif label[i] == main and acc and along[i] is not None \
+                and along[i] not in owned and acc.get(along[i], 0.0) >= 0.5:
+            home[i] = along[i]
+        region[i] = reg.most_common(1)[0][0] if reg else None
+        body = {k: x for k, x in w.items() if k not in zones}
+        lead[i] = max(body, key=body.get) if body else _nearest_bone(rig, trunk, C[i])
+
+    def near_root(i, z):
+        head, radius, _up = roots[z]
+        return (C[i] - head).length <= radius
+
+    # Hai chân chỉ được trộn nhau ở háng. Bàn chân đứng sát nhau cũng nằm trong dải giữa,
+    # giữ luật đó ở đây thì mũi chân trái vẫn kéo mũi chân phải.
+    thighs = [B[l.deform[0]] for l in rigdef.limbs_for(rig)
+              if l.kind == 'LEG' and l.deform and l.deform[0] in B]
+    groin = (sum(t.head_local.z + t.tail_local.z for t in thighs) / (2 * len(thighs))
+             if thighs else None)
+
+    def allowed_part(i, w):
+        keep, z_home = {}, home[i]
+        mine = owner.get(label[i])
+        for k, x in w.items():
+            side = _bone_side(k)
+            dx = C[i].x - mid
+            own = lay.region.get(k) or ""
+            if groin is not None and own.startswith('Leg') and (region[i] or "").startswith('Leg') \
+                    and own != region[i] and C[i].z < groin:
+                continue
+            # Chỉ tay, chân, chuỗi phụ. Mí, mày, môi .L/.R vốn hoà qua sống mũi.
+            limb = k in zones or (lay.region.get(k) or "").startswith(('Arm', 'Leg'))
+            if limb and side and ((side == 'L' and dx < -margin) or (side == 'R' and dx > margin)):
+                continue
+            z = zones.get(k)
+            if mine:                    # đảo rời của chuỗi: chỉ xương của các chuỗi đó
+                if z in mine:
+                    keep[k] = x
+            elif z is not None:
+                if z in owned or label[i] != main:
+                    continue            # chuỗi đã có lưới riêng thì không ăn sang lưới khác
+                if z == z_home:
+                    keep[k] = x
+                elif z_home is None:
+                    if near_root(i, z):
+                        keep[k] = x
+                elif roots[z_home][2] in zones and zones[roots[z_home][2]] == z \
+                        and near_root(i, z_home):
+                    keep[k] = x         # chuỗi con hoà vào chuỗi cha ở sát gốc
+            elif z_home is not None:
+                if k == roots[z_home][2] and near_root(i, z_home):
+                    keep[k] = x
+            elif lay.allowed(k, region[i], C[i]):
+                keep[k] = x
+        return keep
+
+    def clean(i, w):
+        keep, z_home = allowed_part(i, w), home[i]
+        if not keep:
+            pool = [n for n, z in zones.items() if z == z_home] if z_home else [lead[i]]
+            keep = {_nearest_bone(rig, pool, C[i]): 1.0}
+        top = sorted(keep.items(), key=lambda t: -t[1])[:MAX_INF]
+        top = [(k, x) for k, x in top if x >= MIN_W] or top[:1]
+        s = sum(x for _k, x in top) or 1.0
+        return {k: x / s for k, x in top}
+
+    todo = [i for i, w in enumerate(W0) if w and i not in hand]
+    # Chỉ đụng vertex có xương sai chỗ. Vertex sạch giữ nguyên từng số, kể cả quá
+    # 4 xương: đó có thể là weight vẽ tay, xuất Unity tự giới hạn sau.
+    W = list(W0)
+    for i in todo:
+        if len(allowed_part(i, W0[i])) < len(W0[i]):
+            W[i] = clean(i, W0[i])
+    stripped = {i for i in todo
+                if sum(max(0.0, x - W[i].get(k, 0.0)) for k, x in W0[i].items()) >= 0.05}
+    if smooth and stripped:
+        # Chỗ cắt mạnh (háng) cần thêm một vòng vertex để không thành bậc gãy;
+        # chỗ gỡ vụn thì để yên hàng xóm.
+        strong = {i for i in stripped
+                  if sum(max(0.0, x - W[i].get(k, 0.0)) for k, x in W0[i].items()) >= 0.15}
+        band = (stripped | {j for i in strong for j in nb[i]}) - hand
+        band = {i for i in band if W0[i]}
+        smoothed = _smooth(W, nb, band, iters=3)
+        for i in band:
+            W[i] = clean(i, smoothed[i])
+    changed = [i for i in todo
+               if set(W[i]) != set(W0[i]) or any(abs(W[i][k] - W0[i][k]) > 1e-4 for k in W[i])]
+    vg = ob.vertex_groups
+    with cloth.keep_hand([ob]) as kept:
+        for i in changed:
+            for g in list(ob.data.vertices[i].groups):
+                if vg[g.group].name in deform:
+                    vg[g.group].remove([i])
+            for k, x in W[i].items():
+                (vg.get(k) or vg.new(name=k)).add([i], x, 'REPLACE')
+    ob.data.update()
+    return len(changed), kept.count()
+
+
 # ============================================================ khám
 
 def check_static(ob, rig, lay=None, R=None):
@@ -590,6 +818,26 @@ class SRP_OT_weight_fence(Operator):
         return {'FINISHED'}
 
 
+class SRP_OT_weight_localize(Operator):
+    """Gom weight về đúng bộ phận: xương tai không ăn da đầu và tai kia, cánh không ăn
+    tay, trái không ăn phải. Vertex vẽ tay giữ nguyên"""
+    bl_idname = "srp.weight_localize"
+    bl_label = "Khu trú weight"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        rig, body = _target(context)
+        if rig is None or body is None:
+            self.report({'ERROR'}, "Chưa có mesh thân đã bind vào rig")
+            return {'CANCELLED'}
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        n, kept = localize(body, rig)
+        self.report({'INFO'}, "Khu trú weight %s: sửa %d vertex, giữ %d vertex vẽ tay"
+                    % (body.name, n, kept))
+        return {'FINISHED'}
+
+
 class SRP_OT_weight_check(Operator):
     """Khám weight mesh thân: sai vùng, chưa normalize, quá 4 xương, lệch trái/phải;
     rồi cho nhân vật qua các tư thế (tay, chân, lưng, cổ, há miệng) xem vùng nào bị
@@ -683,6 +931,7 @@ def draw_regions(L, context):
     else:
         c = Counter(R)
         col.label(text=", ".join("%s %d" % (REGION_LABEL[r], c[r]) for r in REGIONS if c[r]), icon='DOT')
+    box.operator("srp.weight_localize", icon='MOD_VERTEX_WEIGHT')
     row = box.row(align=True)
     row.operator("srp.weight_check", icon='VIEWZOOM')
     row.operator("srp.weight_regions", text="", icon='FILE_REFRESH').action = 'BUILD'
@@ -695,4 +944,5 @@ def draw_regions(L, context):
                 op.action, op.region = act, r
 
 
-CLASSES = (SRP_OT_weight_fence, SRP_OT_weight_check, SRP_OT_weight_regions)
+CLASSES = (SRP_OT_weight_fence, SRP_OT_weight_localize, SRP_OT_weight_check,
+           SRP_OT_weight_regions)

@@ -186,7 +186,9 @@ def sync_markers(context, ref, mesh=None):
             marker.location = source.location.copy() if source is not None \
                 else _world(ref, *group[0])
             marker[TAG_MARKER] = ref.name
-            marker[TAG_PLACED] = bool(source.get(TAG_PLACED)) if source is not None else False
+            # Mo lai sau khi da don marker: xuong da co mau roll tuc la khop da dat
+            marker[TAG_PLACED] = bool(source.get(TAG_PLACED)) if source is not None else all(
+                TAG_Z0 in ref.data.bones[n].keys() for n, _e in group)
         marker[TAG_ENDS] = json.dumps(["%s:%s" % e for e in group])
         used.add(marker.name)
         for e in group:
@@ -1169,6 +1171,11 @@ def apply_markers(context, ref, mirror=True):
 
 
 def clear_markers(ref):
+    """Xoa cac empty marker va collection cua chung.
+
+    GIU mau roll va do lech tay tren xuong ref: `srp_roll` tinh tu mau nay, xoa
+    mau ma giu do lech thi lan mo lai roll bi cong hai lan.
+    """
     count = 0
     for marker in markers_of(ref):
         bpy.data.objects.remove(marker)
@@ -1176,13 +1183,21 @@ def clear_markers(ref):
     coll = bpy.data.collections.get(collection_name(ref))
     if coll is not None and not coll.objects:
         bpy.data.collections.remove(coll)
-    if TAG_CX in ref.keys():
-        del ref[TAG_CX]
-    for bone in ref.data.bones:
-        for tag in (TAG_H0, TAG_T0, TAG_Z0):
-            if tag in bone.keys():
-                del bone[tag]
     return count
+
+
+def clear_orphans():
+    """Xoa marker cua nhung bo ref khong con trong file (bind xong bo ref bi xoa)."""
+    orphans = [o for o in bpy.data.objects if o.type == 'EMPTY' and o.get(TAG_MARKER)
+               and bpy.data.objects.get(o[TAG_MARKER]) is None]
+    names = {o[TAG_MARKER] + "_Markers" for o in orphans}
+    for marker in orphans:
+        bpy.data.objects.remove(marker)
+    for name in names:
+        coll = bpy.data.collections.get(name)
+        if coll is not None and not coll.objects:
+            bpy.data.collections.remove(coll)
+    return len(orphans)
 
 
 def build_template(context, ref, mesh, settings, face=False):
@@ -2014,6 +2029,12 @@ def draw_panel(layout, context):
     refs = context.scene.srp_ref
     ref = refrig.find_ref(context)
     found = markers_of(ref)
+    if not found and ref is not None and not refrig.missing_core(ref):
+        # Marker da don sau khi dung rig: dung lai tu bo ref, khong hoi kieu chan nua
+        big = layout.column()
+        big.scale_y = 1.5
+        big.operator("srp.marker_start", text="Mở lại marker từ bộ ref", icon='EMPTY_AXIS')
+        return
     if not found:
         col = layout.column(align=True)
         col.row(align=True).prop(refs, "leg_type", expand=True)

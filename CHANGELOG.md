@@ -7,6 +7,22 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.37.0 — 2026-11-25
+
+**Khu trú weight và tự dọn marker.**
+- Bước *Khu trú weight* tự chạy sau Bind (tắt được ở tuỳ chọn Bind), kèm nút riêng ở mục Vùng
+  weight & khám. Đảo lưới rời được xét theo hình học: chỉ thuộc chuỗi phụ khi nằm dọc theo
+  xương chuỗi. Chuỗi đã có lưới riêng không ăn sang lưới khác; trái không ăn phải; hai chân chỉ
+  trộn ở háng. Chỉ đụng vertex có xương sai chỗ, vertex vẽ tay giữ nguyên.
+- Đo trên bản sao Mothman, bind lại từ đầu: mắt dính xương râu 83% -> 0; `Ear.L` chung vertex
+  với đầu 217 -> 0, với `Ear.R` 82 -> 0; weight sai bên 70 -> 2; xoay râu không kéo mắt / thân;
+  giãn cạnh khi gập bắp tay x2.07 -> x1.31, đùi x1.89 -> x1.54; cánh dưới x1.62 -> x1.72.
+  Trên Kid, Adult (weight vẽ tốt): đổi 2% vertex, không xương nào mất weight.
+- Dựng rig + widget thành công thì xoá hết marker và collection của chúng; marker chưa ghi được
+  ghi vào bộ ref trước khi dựng, dựng lỗi thì giữ marker. Bind xoá bộ ref thì marker mồ côi
+  cũng bị xoá. Mở lại marker từ bộ ref giữ đúng vị trí và roll.
+- Test mới `weight_localize` (10 mục); `markers` 96 mục. Chưa thử trên animation thật.
+
 ## 1.36.1 — 2026-11-23
 
 **Sửa chuỗi đối xứng và khớp rẽ nhánh.**

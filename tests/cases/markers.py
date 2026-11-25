@@ -270,9 +270,26 @@ rep("đùi: Z ra trước", wz("Thigh.L").y < -0.9, "%.3f" % wz("Thigh.L").y)
 rep("cột sống: Z ra sau", wz("Spine.001").y > 0.9, "%.3f" % wz("Spine.001").y)
 rep("cánh tay chéo (A-pose): Z ra sau", wz("Bicep.L").y > 0.8, "%.3f" % wz("Bicep.L").y)
 
-# dựng rig
+# dựng rig: lỗi thì giữ marker, thành công thì dọn
+E = MK.end_map(ref)
+tip_m, tip_h = E[("Tail.003", 'T')], E[("Tail.003", 'H')]
+tip_keep = tip_m.location.copy()
+tip_m.location = tip_h.location.copy()
+try:
+    refused = bpy.ops.srp.generate() != {'FINISHED'}
+except RuntimeError:
+    refused = True
+rep("marker lỗi thì không dựng, giữ nguyên marker", refused and "MK_Rig" not in bpy.data.objects and len(MK.markers_of(ref)) > 0)
+tip_want = tip_keep + Vector((0.0, 0.02, 0.01))     # chỉnh mà chưa bấm Enter
+tip_m.location = tip_want
+n_marker = len(MK.markers_of(ref))
+coll_name = MK.collection_name(ref)
 rep("dựng rig", bpy.ops.srp.generate() == {'FINISHED'})
 rig = bpy.data.objects["MK_Rig"]
+rep("dựng xong dọn hết marker", not MK.markers_of(ref) and coll_name not in bpy.data.collections, "%d marker trước đó" % n_marker)
+rep("không còn empty marker nào trong file", not any(o.get(MK.TAG_MARKER) for o in bpy.data.objects))
+rep("bộ ref vẫn giữ lại", ref.name in bpy.data.objects and len(ref.data.bones) > 0)
+rep("chỉnh chưa Enter vẫn vào rig", ((rig.matrix_world @ rig.data.bones["Tail.003"].tail_local) - tip_want).length < 1e-5)
 rep("đủ 4 chi", len(rigdef.limbs_for(rig)) == 4)
 rep("FK/IK chuyển được", not build.verify_switching(ctx, rig))
 rep("xương tóc vào rig", "Hair.L.002" in rig.data.bones and "Hair.R" in rig.data.bones)
@@ -287,4 +304,15 @@ rep("rig giữ roll tay", (rig.data.bones["Index.L"].matrix_local.to_3x3() @ Vec
 hm = UE.humanoid_map(rig)
 rep("đủ xương Humanoid chính", all(k in hm for k in ("Hips", "Spine", "Head", "LeftUpperArm", "LeftHand", "RightFoot")), str(len(hm)))
 rep("không còn xương dài 0", not any(b.length < 1e-4 for b in rig.data.bones))
+# mở lại marker sau khi đã dọn: đúng vị trí, roll không bị cộng hai lần
+n_bones = len(ref.data.bones)
+before_z = {b.name: wz(b.name) for b in ref.data.bones}
+rep("mở lại marker từ bộ ref", bpy.ops.srp.marker_start() == {'FINISHED'} and len(MK.markers_of(ref)) == n_marker and len(ref.data.bones) == n_bones, "%d marker" % len(MK.markers_of(ref)))
+rep("mở lại: khớp vẫn tính là đã đặt", all(bpy.data.objects[g["marker"]].get(MK.TAG_PLACED) for g in MK.guide_of(ref)))
+rep("mở lại: đúng vị trí", (MK.end_map(ref)[("Tail.003", 'T')].location - tip_want).length < 1e-5)
+plan = MK.frames(ref)
+off = max((plan[n][2] - z).length for n, z in before_z.items() if plan[n][2] is not None)
+rep("mở lại: roll không đổi", off < 1e-3, "lệch %.5f" % off)
+generate.drop_ref(ctx)
+rep("bind xoá bộ ref thì marker cũng hết", not any(o.get(MK.TAG_MARKER) for o in bpy.data.objects) and coll_name not in bpy.data.collections)
 print("TỔNG %d/%d" % (sum(results), len(results)))

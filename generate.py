@@ -23,7 +23,7 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty,
                        IntProperty, PointerProperty, StringProperty)
 from mathutils import Vector
 
-from . import build, cloth, compat, face, prefs, refrig, rigdef, snap, widgets
+from . import build, cloth, compat, face, markers, prefs, refrig, rigdef, snap, widgets
 
 def eye_bone_names(rig):
     """Mọi xương mắt trên rig, xếp theo cặp: Eye.L, Eye.R, Eye_2.L, Eye_2.R...
@@ -588,6 +588,21 @@ class SRP_OT_generate(bpy.types.Operator):
             self.report({'ERROR'}, "Bộ ref còn thiếu: %s" % ", ".join(labels))
             return {'CANCELLED'}
 
+        # Marker dang Tam dung co the moi hon bo ref: ghi vao truoc, khong thi rig
+        # dung theo vi tri cu roi marker bi don mat luon phan vua chinh.
+        if markers.is_active():
+            self.report({'ERROR'}, "Đang đặt marker: bấm Enter để xong trước khi dựng rig")
+            return {'CANCELLED'}
+        if markers.markers_of(ref):
+            mirror = context.scene.srp_marker.mirror
+            if mirror:
+                markers.mirror_all(ref)
+            bad = markers.zero_bones(ref)
+            if bad:
+                self.report({'ERROR'}, "Hai đầu xương trùng nhau: %s" % ", ".join(bad[:5]))
+                return {'CANCELLED'}
+            markers.apply_markers(context, ref, mirror)
+
         bones = snapshot(ref)
         parts = {key: {base: bone.name for base, bone in group.items()}
                  for key, group in refrig.parts_in(ref).items()}
@@ -630,6 +645,10 @@ class SRP_OT_generate(bpy.types.Operator):
             self.report({'ERROR'}, "Dựng xong nhưng FK↔IK hỏng: %s" % failures[0])
             return {'FINISHED'}
 
+        # Rig da dung dung: marker het viec, don cho nhe file. Vi tri va roll da nam
+        # tren bo ref nen luc can van mo lai duoc. Dung loi o tren thi giu marker.
+        markers.clear_markers(ref)
+
         # Bo ref da xong viec — an di, khong xoa. Xoa la mat ban ve, ma sua rig
         # thi phai sua tu ban ve roi dung lai.
         ref.hide_set(True)
@@ -651,6 +670,10 @@ class SRP_OT_bind(bpy.types.Operator):
         description="Automatic weights không biết răng phải cứng và nhãn cầu "
                     "phải quay trọn khối. Bước này tô lại ba xương mặt theo "
                     "nhóm vùng FS_*. Không có nhóm vùng thì tự bỏ qua")
+    localize: BoolProperty(
+        name="Khu trú weight", default=True,
+        description="Sau automatic weights, gom weight về đúng bộ phận: tai không ăn da "
+                    "đầu và tai kia, cánh không ăn tay, trái không ăn phải")
     drop_ref: BoolProperty(
         name="Xoá bộ xương ref", default=True,
         description="Bind xong là bộ ref hết việc — xoá đi cho gọn file. TẮT "
@@ -804,6 +827,15 @@ class SRP_OT_bind(bpy.types.Operator):
             for line in fitref.bind_from_template(context, rig, mesh):
                 message += " | " + line
             context.view_layer.objects.active = rig
+        elif self.localize:
+            # Weight chep tu nhan vat mau la weight ve tay: khong dong vao.
+            from . import weightfence
+            try:
+                changed, _kept = weightfence.localize(mesh, rig)
+                message += prefs.detail(" | khu trú weight: %d vertex" % changed)
+            except Exception as error:      # khong duoc lam hong Bind
+                print("Rig Tẩm Hành: chưa khu trú được weight:", error)
+                message += " | chưa khu trú được weight"
 
         # Lap vertex tong trong so < 1 (to lai ham hay de lai vai cai o cam) TRUOC
         # quan ao: "chep tu than" doc lai chinh trong so than.
@@ -1225,6 +1257,7 @@ def drop_ref(context):
     """
     refs = [obj for obj in bpy.data.objects if refrig.is_ref(obj)]
     if not refs:
+        markers.clear_orphans()
         return None
     names = [obj.name for obj in refs]
     data = [obj.data for obj in refs]
@@ -1235,6 +1268,8 @@ def drop_ref(context):
     for block in data:
         if block.users == 0:
             bpy.data.armatures.remove(block)
+    # Marker cua bo ref vua xoa khong con dung duoc vao viec gi
+    markers.clear_orphans()
     return ", ".join(names)
 
 

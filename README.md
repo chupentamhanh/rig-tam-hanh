@@ -169,6 +169,7 @@ chuột; các mục tính lại weight đều hỏi lại trước, kèm số ve
 | **Sửa hông, gối, khuỷu** | Háng gập thành khe, mông gãy khi giơ chân, khoeo/lòng khuỷu móp khi gập sâu. |
 | **Sửa hông và gối (không đụng tay)** | Như trên nhưng không chạm vào tay. |
 | **Rào weight theo vùng** | Xương lấn sang vùng không phải của nó: vai ăn lên má (nhún vai má bị kéo), hàm ăn ra sau gáy / xuống ngực (há miệng sau đầu bị kéo), đùi bên này ăn sang chân bên kia. Chỉ sửa vertex phạm luật, làm mượt chỗ vừa gỡ. |
+| **Khu trú weight** | Tự chạy sau Bind (tắt được). Gom weight về đúng bộ phận: mắt / phụ kiện rời không dính xương râu, tai, cánh; chuỗi phụ không ăn da thân và chuỗi bên kia; trái không ăn phải; hai chân chỉ trộn ở háng. Chỉ đụng vertex sai, vertex vẽ tay giữ nguyên. |
 | **Lấp chỗ thiếu weight** | Có vertex tổng weight < 1 (đứng yên khi pose). |
 
 **Vùng weight & khám** (hộp ngay dưới menu):

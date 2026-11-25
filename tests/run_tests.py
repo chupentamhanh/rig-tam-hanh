@@ -45,6 +45,7 @@ TESTS = [
     ("retarget", "retarget.py", "adult_final.blend", ["{out}"], "CHECK", []),
     ("limb_types", "limb_types.py", None, ["{out}"], "CHECK", []),
     ("markers", "markers.py", None, ["{out}"], "CHECK", []),
+    ("weight_localize", "weight_localize.py", None, ["{out}"], "CHECK", []),
     ("unity_export", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity"], "SMOKE", []),
     ("unity_import", "unity_import.py", None, ["{shared}/unity"], "SMOKE", []),
     ("unity_export_combined", "unity_export.py", "kid_facekeys.blend", ["{shared}/unity_c", "combine"], "SMOKE", []),
