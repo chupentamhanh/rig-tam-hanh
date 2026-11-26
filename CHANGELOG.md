@@ -7,6 +7,29 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.41.0 — 2026-11-26
+
+**Chép weight nhân vật mẫu kiểu Mixamo** (`templateweights.py`) -- bước thử trong *Sửa weight*.
+- Mixamo không công bố công thức; bằng sáng chế US 8,797,328 mô tả khớp bộ xương mẫu rồi lấy
+  weight từ nhân vật mẫu tô tay. Mẫu ở đây là *Rig mẫu / Mesh mẫu* của bước dựng ref.
+- *Theo xương*: xương chính của vertex lấy từ weight theo lưới; đặc trưng = (t dọc xương,
+  0.35·cos / sin góc quanh trục xương trong hệ toạ độ xương); trung bình 4 vertex mẫu gần
+  nhất cùng xương chính theo nghịch đảo khoảng cách; tên xương mẫu thiếu thì leo lên cha; bỏ
+  xương mặt của mẫu. Xương mẫu không có (đuôi, tai, cánh) giữ weight theo lưới. Mảnh không
+  xương chép lại từ da ngay dưới (bản đầu thiếu: lông mày Hotdog tách khỏi da khi pose),
+  làm mượt 2 lượt, đối xứng, tối đa 4 xương.
+- *Uốn lưới mẫu*: `fitref.solve` + `copy_weights`; tạm dời rig mẫu cho đáy-tâm hộp bao hai
+  lưới trùng nhau rồi trả về (mẫu đặt cạnh nhân vật: 40/40 tư thế lỗi -> như đặt chồng).
+- `topoweights.attach_boneless`, `topoweights.limit` tách ra dùng chung.
+- Chưa chọn mẫu, hoặc mẫu là chính nhân vật: hai bước báo "bỏ qua (chưa chọn nhân vật mẫu)".
+- Số đo (mẫu Adult vẽ tay; tư thế có lỗi / 40 sau cả nút):
+  - Hotdog: theo lưới 1 (giãn max x2.86), mẫu theo xương **0** (x2.17), uốn lưới 9 (x24 --
+    dáng quá khác người). Nút giữ mẫu theo xương: 18 -> 0, 49 s.
+  - Kid: theo lưới 0 (giãn TB x1.57), theo xương 0 (x1.64), uốn lưới 0 (x1.73). Nút giữ theo
+    xương vì chọn ngay sau từng bước, chưa so cả chuỗi -- kém theo lưới một chút.
+  - Uốn lưới ~40 s mỗi lần bấm khi đã chọn mẫu; bị bỏ ở cả hai nhân vật.
+- Test mới `template_weights` (12 mục); cả bộ 33/33.
+
 ## 1.40.0 — 2026-11-26
 
 **Weight theo lưới nhân vật** (`topoweights.py`) -- bước đầu của nút *Sửa weight*.

@@ -201,32 +201,46 @@ def compute(body, rig, falloff=FALLOFF, smooth=SMOOTH, seed_slack=SEED_SLACK, ro
             W = np.where(deg > 0, 0.5 * W + 0.5 * acc / np.maximum(deg, 1), W)
 
     # 5. đảo không xương: chép từ chỗ gần nhất của đảo có xương
-    src = np.nonzero(ok)[0]
-    if len(src) and not ok.all():
-        kd = kdtree.KDTree(len(src))
-        for k, i in enumerate(src):
-            kd.insert(P[i], k)
-        kd.balance()
-        for r in np.unique(isl[~ok]):
-            idx = np.nonzero((isl == r) & ~ok)[0]
-            rows = np.array([W[src[kd.find(P[i])[1]]] for i in idx])
-            if np.ptp(P[idx], axis=0).max() < SMALL * height:
-                rows[:] = rows.mean(0)                  # mảnh nhỏ: đi cứng
-            W[idx] = rows
+    info["boneless"] = ~ok
+    info["islands_of"] = isl
+    W = attach_boneless(P, W, isl, ~ok, height)
 
     # 6. đối xứng: cặp vertex gương (qua x = 0 của rig) lấy trung bình, đổi .L <-> .R
     if symmetric:
         W = _symmetrize(P, W, names, height)
 
-    # tối đa 4 xương, bỏ vụn, normalize
-    if m > MAX_INF:                                     # đúng 4 xương nặng nhất (kể cả khi bằng nhau)
+    return names, limit(W), info
+
+
+def attach_boneless(P, W, isl, boneless, height):
+    """Vertex của đảo không xương lấy weight vertex gần nhất của đảo có xương;
+    đảo nhỏ (< SMALL chiều cao) đi cứng theo trung bình. Trả về W mới."""
+    src = np.nonzero(~boneless)[0]
+    if not len(src) or not boneless.any():
+        return W
+    W = W.copy()
+    kd = kdtree.KDTree(len(src))
+    for k, i in enumerate(src):
+        kd.insert(P[i], k)
+    kd.balance()
+    for r in np.unique(isl[boneless]):
+        idx = np.nonzero((isl == r) & boneless)[0]
+        rows = np.array([W[src[kd.find(P[i])[1]]] for i in idx])
+        if np.ptp(P[idx], axis=0).max() < SMALL * height:
+            rows[:] = rows.mean(0)                      # mảnh nhỏ: đi cứng
+        W[idx] = rows
+    return W
+
+
+def limit(W):
+    """Đúng MAX_INF xương nặng nhất (kể cả khi bằng nhau), bỏ < MIN_W, normalize."""
+    if W.shape[1] > MAX_INF:
         top = np.argsort(-W, axis=1, kind='stable')[:, :MAX_INF]
         keep = np.zeros_like(W, dtype=bool)
         np.put_along_axis(keep, top, True, axis=1)
         W = np.where(keep, W, 0)
-    W[W < MIN_W] = 0
-    W /= np.maximum(W.sum(1, keepdims=True), 1e-12)
-    return names, W, info
+    W = np.where(W < MIN_W, 0, W)
+    return W / np.maximum(W.sum(1, keepdims=True), 1e-12)
 
 
 def _mirror_name(nm):

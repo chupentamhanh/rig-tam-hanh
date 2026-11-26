@@ -177,7 +177,14 @@ sửa hông / gối / khuỷu, (thử) tự làm mượt các khớp, rào lại
 vụn (< 0.01), tối đa 4 xương mỗi vertex, normalize. Bước *thử* được khám ~40 tư thế ngay sau
 khi làm: không tốt hơn thì tự trả lại weight cũ (vd. sửa hông đo trên người, gặp nhân vật
 không dáng người như Hotdog thì bị bỏ). Bước tính theo lưới cũng là bước thử: weight đã vẽ
-tay tốt thì được giữ. Kết quả từng bước in ở console. Hỏi lại trước khi
+tay tốt thì được giữ.
+
+**Chép weight nhân vật mẫu (kiểu Mixamo).** Đã chọn *Rig mẫu / Mesh mẫu* ở bước dựng ref
+(một nhân vật đã rig và tô weight tay trong cùng file, để cạnh nhân vật cũng được) thì nút
+thử thêm hai cách lấy weight của mẫu: *theo xương* -- mỗi vertex lấy weight của vertex mẫu
+cùng xương chính, cùng vị trí dọc xương và góc quanh xương, không cần hai lưới giống nhau;
+và *uốn lưới mẫu* áp lên lưới mới (hợp nhân vật cùng dáng, ~40 giây). Cách nào khám tư thế
+tốt hơn thì giữ. Kết quả từng bước in ở console. Hỏi lại trước khi
 làm, vertex vẽ tay giữ nguyên, quần áo cập nhật theo thân.
 
 Mũi tên cạnh nút mở menu chạy **riêng từng việc** (mỗi mục có chú thích khi rê chuột):

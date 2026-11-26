@@ -298,6 +298,8 @@ HELP = {
         "Sửa weight: tính lại weight theo lưới nhân vật (mảnh lưới nào chứa xương nào,",
         "  khoảng cách đi dọc bề mặt, không xuyên khe), rồi làm hết các bước dưới đây.",
         "  Bước nào khám tư thế thấy không tốt hơn thì tự bỏ (vd. weight đã vẽ tay tốt).",
+        "  Đã chọn Rig mẫu / Mesh mẫu (bước dựng ref): thử thêm chép weight tô tay của",
+        "  mẫu kiểu Mixamo -- theo vị trí quanh từng xương, và uốn lưới mẫu (~40 giây).",
         "  Kết quả từng bước in ở console. Dọn luôn weight vụn, tối đa 4 xương.",
         "Mũi tên bên cạnh: chạy riêng từng bước --",
         "  Tự làm mượt weight các khớp: chạy ngay sau Bind, trước khi vẽ tay.",

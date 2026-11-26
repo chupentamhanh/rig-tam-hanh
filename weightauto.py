@@ -4,6 +4,9 @@ khi pose thì giữ hay bỏ theo phép khám tư thế.
 Thứ tự (vertex vẽ tay giữ nguyên ở mọi bước):
 0. Tính lại weight theo lưới (topoweights) -- THỬ: weight hiện có tốt hơn (vd.
    đã vẽ tay) thì giữ weight hiện có.
+0b. Chép weight nhân vật mẫu (templateweights, kiểu Mixamo) theo xương, rồi theo
+   lưới mẫu uốn -- THỬ, chỉ khi đã chọn Rig mẫu / Mesh mẫu ở bước dựng ref. Mỗi
+   bước so với bản tốt nhất tới lúc đó: cuối cùng giữ cách cho điểm tốt nhất.
 1. Khu trú weight (weightfence.localize) -- luôn làm: sửa xương ăn sai bộ phận.
 2. Rào weight theo vùng (weightfence.fence) -- luôn làm: sửa xương lấn vùng.
 3. Sửa hông, gối, khuỷu (cloth.hip_band + joint_band) -- THỬ: dải chuyển đo trên
@@ -21,7 +24,7 @@ import time
 
 import numpy as np
 
-from . import bakeweights, cloth, topoweights, weightfence as WF
+from . import bakeweights, cloth, templateweights, topoweights, weightfence as WF
 
 MAX_INF = WF.MAX_INF
 MIN_W = WF.MIN_W
@@ -108,6 +111,8 @@ def _bake(context, body, rig):
 STEPS = (
     # (khoá, tên, luôn làm?)
     ('TOPO', "Tính lại weight theo lưới", False),
+    ('TPL_BONE', "Chép weight nhân vật mẫu theo xương", False),
+    ('TPL_FIT', "Chép weight nhân vật mẫu uốn theo lưới", False),
     ('LOCALIZE', "Khu trú weight", True),
     ('FENCE', "Rào weight theo vùng", True),
     ('JOINTS', "Sửa hông, gối, khuỷu", False),
@@ -130,6 +135,8 @@ def autofix(context, body, rig, skip=()):
     before = cur
     run = {
         'TOPO': lambda: topoweights.rebuild(body, rig),
+        'TPL_BONE': lambda: templateweights.rebuild_by_bone(context, body, rig),
+        'TPL_FIT': lambda: templateweights.rebuild_by_fit(context, body, rig),
         'LOCALIZE': lambda: WF.localize(body, rig),
         'FENCE': lambda: WF.fence(body, rig),
         'JOINTS': lambda: _joints(body, rig),
@@ -138,10 +145,15 @@ def autofix(context, body, rig, skip=()):
         'TIDY': lambda: tidy(body, rig, keep),
         'FILL': lambda: cloth.fill_weights(body, rig),
     }
+    trig, tmesh = templateweights.template(context)
+    no_tpl = trig is None or tmesh is body
     out = []
     for key, label, always in STEPS:
         if key in skip:
             out.append((key, label, 'SKIP', 0))
+            continue
+        if key.startswith('TPL_') and no_tpl:
+            out.append((key, label, 'NOTPL', 0))
             continue
         old = _rows(body)
         try:
@@ -171,7 +183,7 @@ def autofix(context, body, rig, skip=()):
 
 
 STATUS = {'KEPT': "giữ", 'UNDONE': "thử rồi bỏ (không tốt hơn)", 'SAME': "không cần sửa",
-          'SKIP': "bỏ qua"}
+          'SKIP': "bỏ qua", 'NOTPL': "bỏ qua (chưa chọn nhân vật mẫu ở bước dựng ref)"}
 
 
 def lines(result):
