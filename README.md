@@ -167,11 +167,17 @@ Muốn đổi trên bộ ref đã có: xoá bộ phận Chân hoặc Bàn tay tr
 
 Ở khu **Sửa → Trọng số skin**:
 
-Nút **Sửa weight** làm hết các việc trong bảng dưới theo thứ tự: khu trú, rào vùng, (thử)
+Nút **Sửa weight** trước hết *tính lại weight theo lưới nhân vật*: chia lưới thành các mảnh
+rời, mảnh nào chỉ dùng xương nằm trong nó (mảnh không có xương -- vỏ, decal, nhãn cầu -- chép
+weight từ mảnh có xương ngay dưới); khoảng cách tới xương đi dọc bề mặt lưới nên weight
+không xuyên khe giữa hai chân hay từ tay sang thân; vùng chuyển rộng theo độ dày lưới (thân
+to thì rộng, ngón tay hẹp); xương gốc chi (Shoulder, Pelvis) không giành da thân; ép đối xứng
+trái / phải. Rồi làm hết các việc trong bảng dưới theo thứ tự: khu trú, rào vùng, (thử)
 sửa hông / gối / khuỷu, (thử) tự làm mượt các khớp, rào lại, lấp chỗ thiếu, rồi dọn weight
 vụn (< 0.01), tối đa 4 xương mỗi vertex, normalize. Bước *thử* được khám ~40 tư thế ngay sau
 khi làm: không tốt hơn thì tự trả lại weight cũ (vd. sửa hông đo trên người, gặp nhân vật
-không dáng người như Hotdog thì bị bỏ). Kết quả từng bước in ở console. Hỏi lại trước khi
+không dáng người như Hotdog thì bị bỏ). Bước tính theo lưới cũng là bước thử: weight đã vẽ
+tay tốt thì được giữ. Kết quả từng bước in ở console. Hỏi lại trước khi
 làm, vertex vẽ tay giữ nguyên, quần áo cập nhật theo thân.
 
 Mũi tên cạnh nút mở menu chạy **riêng từng việc** (mỗi mục có chú thích khi rê chuột):

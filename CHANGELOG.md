@@ -7,6 +7,32 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.40.0 — 2026-11-26
+
+**Weight theo lưới nhân vật** (`topoweights.py`) -- bước đầu của nút *Sửa weight*.
+- Mảnh lưới: mesh chia thành các mảnh rời; xương nằm trong mảnh (đếm số lần tia cắt mặt của
+  chính mảnh, 3 hướng, đa số lẻ) là xương của mảnh, cộng xương cha nơi mảnh bám vào. Mảnh
+  không chứa xương chép weight từ vertex gần nhất của mảnh có xương; mảnh < 15% chiều cao đi
+  cứng. Bản đầu không có bước này: vỏ bánh Hotdog (liền với hai tay) bị xé theo tay.
+- Hạt giống: vertex mà xương của mảnh nhìn thấy (chỉ mặt của mảnh đó che), gần nhất trong
+  các xương nhìn thấy (sai không quá 1.25 lần). Khoảng cách = khoảng cách hạt giống -> xương +
+  đường ngắn nhất theo cạnh lưới: không xuyên khe.
+- Weight = exp(-(D - Dmin) / (0.4 Dmin)): vùng chuyển rộng theo độ dày lưới. Xương gốc chi
+  tính xa gấp 2 (không thì Shoulder giành 894 / 493 vertex vỏ bánh Hotdog, nay 23 / 23).
+  Làm mượt dọc cạnh 4 lượt; ép đối xứng qua x = 0 của rig (đổi .L / .R) -- lệch trái / phải
+  Hotdog 141 -> 2; đúng 4 xương nặng nhất, bỏ < 0.01, normalize. Xương mặt và vertex vẽ tay
+  giữ nguyên.
+- Trong nút *Sửa weight* là bước THỬ: weight hiện có tốt hơn thì giữ.
+- Số đo (nút Sửa weight, tư thế có lỗi trên 40, giãn trung bình):
+  - Hotdog v3: 18 -> 1, x2.50 -> x1.61 (1.39.0: 18 -> 4, x1.82); render: vỏ bánh không theo
+    tay, hông tròn khi giơ đùi; gốc tay khi buông tay da vỏ trĩu hơn chút (bản cũ có nếp lõm).
+  - Kid (weight automatic): 39 -> 0, giãn trung bình -> x1.57.
+  - Adult (vẽ tay): bước theo lưới tự bỏ (7 tư thế lỗi so với 1), kết quả như 1.39.0.
+  - ~1 s trên 3000 vertex.
+- Test mới `topo_weights` (9 mục: mảnh chứa đúng xương, mảnh không xương có weight, không
+  rò chân sang chân ngoài dải háng, cẳng tay không ăn thân, vẽ tay / xương mặt giữ, khám
+  tốt hơn automatic, đối xứng); cả bộ 32/32.
+
 ## 1.39.0 — 2026-11-26
 
 **Sửa weight một nút** (`weightauto.py`, `srp.weights_auto`).

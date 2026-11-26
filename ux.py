@@ -89,10 +89,11 @@ class SRP_OT_weights_fix(Operator):
 
 
 class SRP_OT_weights_auto(Operator):
-    """Sửa weight mesh thân một lần bấm: khu trú, rào vùng, (thử) sửa hông / gối / khuỷu,
-    (thử) tự làm mượt các khớp, dọn weight vụn, tối đa 4 xương, normalize, lấp chỗ
-    thiếu. Bước nào khám tư thế thấy không tốt hơn thì tự bỏ. Vertex vẽ tay giữ
-    nguyên; quần áo cập nhật theo thân"""
+    """Sửa weight mesh thân một lần bấm: tính lại weight theo lưới nhân vật (theo mảnh
+    lưới và khoảng cách dọc bề mặt), khu trú, rào vùng, sửa hông / gối / khuỷu, tự làm
+    mượt các khớp, lấp chỗ thiếu, dọn weight vụn, tối đa 4 xương, normalize. Bước nào
+    khám tư thế thấy không tốt hơn thì tự bỏ. Vertex vẽ tay giữ nguyên; quần áo cập
+    nhật theo thân"""
     bl_idname = "srp.weights_auto"
     bl_label = "Sửa weight tự động"
     bl_options = {'REGISTER', 'UNDO'}

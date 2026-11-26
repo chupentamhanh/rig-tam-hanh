@@ -2,6 +2,8 @@
 khi pose thì giữ hay bỏ theo phép khám tư thế.
 
 Thứ tự (vertex vẽ tay giữ nguyên ở mọi bước):
+0. Tính lại weight theo lưới (topoweights) -- THỬ: weight hiện có tốt hơn (vd.
+   đã vẽ tay) thì giữ weight hiện có.
 1. Khu trú weight (weightfence.localize) -- luôn làm: sửa xương ăn sai bộ phận.
 2. Rào weight theo vùng (weightfence.fence) -- luôn làm: sửa xương lấn vùng.
 3. Sửa hông, gối, khuỷu (cloth.hip_band + joint_band) -- THỬ: dải chuyển đo trên
@@ -19,7 +21,7 @@ import time
 
 import numpy as np
 
-from . import bakeweights, cloth, weightfence as WF
+from . import bakeweights, cloth, topoweights, weightfence as WF
 
 MAX_INF = WF.MAX_INF
 MIN_W = WF.MIN_W
@@ -105,6 +107,7 @@ def _bake(context, body, rig):
 
 STEPS = (
     # (khoá, tên, luôn làm?)
+    ('TOPO', "Tính lại weight theo lưới", False),
     ('LOCALIZE', "Khu trú weight", True),
     ('FENCE', "Rào weight theo vùng", True),
     ('JOINTS', "Sửa hông, gối, khuỷu", False),
@@ -126,6 +129,7 @@ def autofix(context, body, rig, skip=()):
     cur = score(body, rig, lay, R)
     before = cur
     run = {
+        'TOPO': lambda: topoweights.rebuild(body, rig),
         'LOCALIZE': lambda: WF.localize(body, rig),
         'FENCE': lambda: WF.fence(body, rig),
         'JOINTS': lambda: _joints(body, rig),
