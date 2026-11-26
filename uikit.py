@@ -295,7 +295,10 @@ HELP = {
         "4. Retarget: ra action mới <animation>_<rig>, tay / chân theo FK hoặc IK.",
     )),
     'repair_weights': ("Trọng số skin", (
-        "Sửa weight… -- chọn một việc:",
+        "Sửa weight: làm hết các bước dưới đây theo thứ tự; bước nào khám tư thế",
+        "  thấy không tốt hơn (vd. sửa hông trên nhân vật không dáng người) thì tự bỏ.",
+        "  Kết quả từng bước in ở console. Dọn luôn weight vụn, tối đa 4 xương.",
+        "Mũi tên bên cạnh: chạy riêng từng bước --",
         "  Tự làm mượt weight các khớp: chạy ngay sau Bind, trước khi vẽ tay.",
         "  Sửa hông, gối, khuỷu: háng thành khe, mông gãy, khoeo / khuỷu móp.",
         "  Sửa hông và gối: như trên, không đụng tay.",

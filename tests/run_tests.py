@@ -42,6 +42,7 @@ TESTS = [
     ("face_bendy", "face_bendy.py", "adult_final.blend", ["{out}"], "CHECK", []),
     ("face_bendy_remove", "face_bendy_remove.py", "adult_final.blend", [], "CHECK", []),
     ("weight_fence", "weight_fence.py", "adult_final.blend", [], "CHECK", []),
+    ("weight_auto", "weight_auto.py", "adult_final.blend", [], "CHECK", []),
     ("retarget", "retarget.py", "adult_final.blend", ["{out}"], "CHECK", []),
     ("limb_types", "limb_types.py", None, ["{out}"], "CHECK", []),
     ("markers", "markers.py", None, ["{out}"], "CHECK", []),

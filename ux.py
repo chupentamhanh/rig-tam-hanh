@@ -10,7 +10,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 
-from . import cloth, rigdef, uikit
+from . import cloth, prefs, rigdef, uikit, weightauto
 
 FOLLOW_KEY = "srp_follow_keys"      # tên key mặt lúc mesh phụ bám da lần cuối
 
@@ -86,6 +86,56 @@ class SRP_OT_weights_fix(Operator):
         except RuntimeError as e:          # toán tử con đã báo lỗi
             self.report({'ERROR'}, str(e).replace("Error: ", ""))
             return {'CANCELLED'}
+
+
+class SRP_OT_weights_auto(Operator):
+    """Sửa weight mesh thân một lần bấm: khu trú, rào vùng, (thử) sửa hông / gối / khuỷu,
+    (thử) tự làm mượt các khớp, dọn weight vụn, tối đa 4 xương, normalize, lấp chỗ
+    thiếu. Bước nào khám tư thế thấy không tốt hơn thì tự bỏ. Vertex vẽ tay giữ
+    nguyên; quần áo cập nhật theo thân"""
+    bl_idname = "srp.weights_auto"
+    bl_label = "Sửa weight tự động"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return rigdef.active_rig(context) is not None
+
+    def invoke(self, context, event):
+        _rig, body = _body(context)
+        if body is None:
+            return self.execute(context)
+        kept = len(cloth.hand_painted(body))
+        msg = ("Weight của %s sẽ được tính lại. " % body.name
+               + ("%d vertex bạn đã vẽ tay được giữ nguyên." % kept if kept
+                  else "Chưa có vertex nào được đánh dấu vẽ tay -- chỗ bạn đã sửa sẽ bị tính lại."))
+        if len(context.scene.srp_generate.cloth_meshes):
+            msg += " Quần áo cũng được cập nhật theo."
+        return context.window_manager.invoke_confirm(
+            self, event, title=self.bl_label, message=msg, confirm_text="Sửa", icon='WARNING')
+
+    def execute(self, context):
+        rig, body = _body(context)
+        if body is None or not cloth.deformed_by(body, rig):
+            self.report({'ERROR'}, "Chưa có mesh thân skin vào rig")
+            return {'CANCELLED'}
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        result = weightauto.autofix(context, body, rig)
+        lines = weightauto.lines(result)
+        for line in lines:
+            print("Rig Tẩm Hành | sửa weight |", line)
+        if result["changed"] and len(context.scene.srp_generate.cloth_meshes):
+            lines += update_clothes(context, rig, body)
+            # da dưới áo vừa chép weight áo: dọn lại (vụn, quá 4 xương)
+            weightauto.tidy(body, rig, cloth.hand_painted(body))
+        context.view_layer.objects.active = rig
+        b, a = result["before"], result["after"]
+        kept = [label for _k, label, s, _n in result["steps"] if s == 'KEPT']
+        msg = "%s: sửa %d vertex (%s). Tư thế có lỗi %d -> %d" % (
+            body.name, result["changed"], ", ".join(kept) or "không bước nào cần", b[0], a[0])
+        self.report({'INFO'}, msg + prefs.detail(" | " + " | ".join(lines)))
+        return {'FINISHED'}
 
 
 # ============================================================ quần áo: một nút
@@ -262,4 +312,4 @@ def draw_next(layout, context):
         setattr(b, k, v)
 
 
-CLASSES = (SRP_OT_weights_fix, SRP_OT_cloth_update, SRP_OT_goto)
+CLASSES = (SRP_OT_weights_fix, SRP_OT_weights_auto, SRP_OT_cloth_update, SRP_OT_goto)

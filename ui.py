@@ -532,9 +532,10 @@ class SRP_PT_repair_weights(_NeedRig, bpy.types.Panel):
         row.alert = bool(low)
         row.label(text=", ".join("%s: %d vertex thiếu" % x for x in low) if low
                   else "Mọi vertex đủ trọng số", icon='ERROR' if low else 'CHECKMARK')
-        row = layout.row()
+        row = layout.row(align=True)
         row.scale_y = 1.3
-        row.operator_menu_enum("srp.weights_fix", "task", text="Sửa weight…", icon='MOD_VERTEX_WEIGHT')
+        row.operator("srp.weights_auto", text="Sửa weight", icon='MOD_VERTEX_WEIGHT')
+        row.operator_menu_enum("srp.weights_fix", "task", text="", icon='DOWNARROW_HLT')
         weightfence.draw_regions(layout, context)
         _rig, body = cloth._body_rig(context)
         if body is not None and len(context.scene.srp_generate.cloth_meshes):

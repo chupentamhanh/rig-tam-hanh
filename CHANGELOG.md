@@ -7,6 +7,26 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.39.0 — 2026-11-26
+
+**Sửa weight một nút** (`weightauto.py`, `srp.weights_auto`).
+- Nút **Sửa weight** ở Sửa › Trọng số skin chạy mọi bước sửa weight thân: khu trú, rào vùng,
+  sửa hông / gối / khuỷu, tự làm mượt các khớp, rào lại, lấp chỗ thiếu, dọn (bỏ weight
+  < 0.01, tối đa 4 xương, normalize -- bước mới). Menu từng bước cũ vẫn ở mũi tên bên cạnh.
+- Sửa hông / gối / khuỷu và tự làm mượt là bước *thử*: làm xong khám ~40 tư thế
+  (`weightfence.check_poses`); số tư thế có lỗi không giảm (hoà thì độ giãn trung bình không
+  giảm) thì trả lại weight trước bước đó. Lý do: trên Hotdog, sửa hông làm giãn khi giơ đùi
+  x3.13 -> x5.14 -- dải chuyển weight đo trên người.
+- Mọi bước chạy trong `keep_hand`: vertex vẽ tay y nguyên kể cả bước không tự giữ (lấp chỗ
+  thiếu từng đổi vertex vẽ tay của Adult). Có quần áo thì cập nhật theo thân rồi dọn thân lại
+  (da theo áo chép weight vụn của áo).
+- Số đo:
+  - Hotdog (`Hotdog_Rig_v3`, 2974 vertex): tư thế có lỗi 18/40 -> 4/40, giãn trung bình
+    x2.50 -> x1.82, lớn nhất x4.48 -> x3.13 (giơ đùi 90°: ống chân mảnh cắm vào thân to),
+    weight vụn 50 -> 0; giữ tự làm mượt + dọn, bỏ sửa hông. 3 giây.
+  - Adult cấy lỗi: tư thế có lỗi 15 -> 1, hết lấn vùng ở chỗ cấy, 644 vertex vẽ tay y nguyên.
+- Test mới `weight_auto` (13 mục, có trường hợp bước thử làm hỏng bị trả lại); cả bộ 31/31.
+
 ## 1.38.2 — 2026-11-25
 
 **Mọi pie menu dùng được trong chế độ đặt marker.**
