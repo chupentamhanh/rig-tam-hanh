@@ -396,6 +396,75 @@ def place(ref, marker, point, mirror=True, auto_side=True):
         mirror_all(ref, marker_side(marker) or 'L')
 
 
+# ---------------------------------------------------- chon nhieu khop
+
+def selection():
+    """[ten marker dang chon]; khop ACTIVE (dang thao tac, hien truc, chinh roll) o cuoi."""
+    active = _S.get("selected")
+    out = [n for n in _S.get("picked", ()) if n != active and bpy.data.objects.get(n)]
+    if active and bpy.data.objects.get(active):
+        out.append(active)
+    return out
+
+
+def select_only(name):
+    _S["selected"] = name
+    _S["picked"] = []
+
+
+def toggle_pick(name):
+    """Shift+click nhu Blender: chua chon -> them va thanh active; dang active -> bo
+    chon; da chon nhung chua active -> thanh active."""
+    sel = selection()
+    active = _S.get("selected")
+    if name not in sel:
+        _S["picked"], _S["selected"] = sel, name
+    elif name == active:
+        rest = [n for n in sel if n != name]
+        _S["picked"], _S["selected"] = rest[:-1], (rest[-1] if rest else None)
+    else:
+        _S["picked"], _S["selected"] = [n for n in sel if n != name], name
+
+
+def _depth(marker):
+    d, up, seen = 0, marker.get(TAG_PARENT), set()
+    while up and up not in seen:
+        seen.add(up)
+        d += 1
+        o = bpy.data.objects.get(up)
+        up = o.get(TAG_PARENT) if o is not None else None
+    return d
+
+
+def group_of(names, mirror):
+    """Marker se thuc su dat. Doi xung: chon ca khop L lan khop R cung cap thi chi
+    dat ben L -- ben R la anh guong, dat ca hai thi hai ben gianh nhau."""
+    objs = [bpy.data.objects[n] for n in names if bpy.data.objects.get(n)]
+    if not mirror:
+        return objs
+    have = {o.name for o in objs}
+    return [o for o in objs
+            if not (marker_side(o) == 'R' and o.get(TAG_TWIN) in have)]
+
+
+def move_group(ref, moves, mirror):
+    """Dat nhieu khop mot luc: {ten marker: diem moi}. Khop cha truoc, khop con sau --
+    dat cha keo theo con chua dat, roi con moi ve dung cho cua no."""
+    for marker in sorted(group_of(list(moves), mirror), key=_depth):
+        place(ref, marker, moves[marker.name], mirror, auto_side=False)
+
+
+def align_moves(names, active, axis, mirror):
+    """{ten: diem moi}: moi khop cung toa do truc `axis` voi khop active (Can thang)."""
+    value = bpy.data.objects[active].location[axis]
+    out = {}
+    for marker in group_of(names, mirror):
+        p = marker.location.copy()
+        p[axis] = value
+        out[marker.name] = p
+    return out
+
+
 def derive(ref):
     """Hai dau xuong khong ai click: duoi xuong don va duoi ban tay."""
     ends = end_map(ref)
@@ -1283,6 +1352,21 @@ def _on_view():
     gpu.state.blend_set('NONE')
 
 
+def _screen_line(region, rv3d, origin, direction):
+    """Doan thang tren man hinh qua `origin` theo `direction`, keo het vung nhin."""
+    a = view3d_utils.location_3d_to_region_2d(region, rv3d, origin)
+    step = max(rv3d.view_distance, 1e-3) * 0.01
+    b = view3d_utils.location_3d_to_region_2d(region, rv3d, origin + direction * step)
+    if a is None or b is None:
+        return None
+    d = b - a
+    if d.length < 1e-6:
+        return None
+    d.normalize()
+    reach = region.width + region.height
+    return [tuple(a - d * reach), tuple(a + d * reach)]
+
+
 def _disc(tris, x, y, r, steps=14):
     for i in range(steps):
         a, b = 2 * math.pi * i / steps, 2 * math.pi * (i + 1) / steps
@@ -1301,7 +1385,8 @@ def _on_text():
     scale = context.preferences.system.ui_scale
     guide = {g["marker"] for g in _S["guide"]}
     target = _S.get("selected")
-    layers = {k: [] for k in ("rest", "key", "done", "halo", "now", "pick")}
+    layers = {k: [] for k in ("rest", "key", "done", "halo", "now", "pick", "also")}
+    also = set(_S.get("picked", ()))
     tag = None
     for marker in markers_of(ref):
         c = view3d_utils.location_3d_to_region_2d(region, rv3d, marker.location)
@@ -1313,6 +1398,8 @@ def _on_text():
         if name == target:
             _disc(layers["halo"], c.x, c.y, 11 * scale)
             _disc(layers["now"], c.x, c.y, 6 * scale)
+        elif name in also:
+            _disc(layers["also"], c.x, c.y, 6 * scale)
         elif name == _S.get("hover"):
             _disc(layers["pick"], c.x, c.y, 7 * scale)
         elif marker.get(TAG_PLACED):
@@ -1325,12 +1412,24 @@ def _on_text():
     gpu.state.blend_set('ALPHA')
     for layer, color in (("rest", (0.75, 0.75, 0.75, 0.55)), ("key", (0.95, 0.95, 0.95, 0.9)),
                          ("done", (0.3, 0.9, 0.4, 1.0)), ("halo", (1.0, 0.55, 0.1, 0.35)),
-                         ("now", (1.0, 0.55, 0.1, 1.0)), ("pick", (0.3, 0.85, 1.0, 1.0))):
+                         ("now", (1.0, 0.55, 0.1, 1.0)), ("pick", (0.3, 0.85, 1.0, 1.0)),
+                         ("also", (0.85, 0.35, 0.02, 1.0))):
         if layers[layer]:
             batch = batch_for_shader(shader, 'TRIS', {"pos": layers[layer]})
             shader.bind()
             shader.uniform_float("color", color)
             batch.draw(shader)
+    axis = _S.get("axis")
+    if axis is not None:        # truc / mat phang dang khoa: duong dai cung mau Blender
+        origin, (index, plane) = axis
+        for k in ((index,) if not plane else [i for i in range(3) if i != index]):
+            line = _screen_line(region, rv3d, origin, _AXES[k])
+            if line:
+                gpu.state.line_width_set(2.0)
+                shader.bind()
+                shader.uniform_float("color", AXIS_COLORS[k])
+                batch_for_shader(shader, 'LINES', {"pos": line}).draw(shader)
+                gpu.state.line_width_set(1.0)
     snap = _S.get("snap")
     if snap is not None:        # diem snap: vong tron nhu transform cua Blender
         c = view3d_utils.location_3d_to_region_2d(region, rv3d, snap[0])
@@ -1388,7 +1487,8 @@ def _on_text():
         blf.draw(font, "Click: thêm khớp    Click trúng marker ở khớp đầu: nối vào đó"
                        "    Chuột phải: bỏ khớp vừa vẽ    Enter: xong chuỗi    Esc: huỷ")
     else:
-        blf.draw(font, "Click: chọn khớp    Giữ và kéo: dời (Ctrl: đảo snap, Shift: bước mịn)"
+        blf.draw(font, "Click: chọn khớp    Shift+click: chọn thêm    Giữ và kéo / G: dời (X Y Z: khoá trục, Shift+X/Y/Z:"
+                       " khoá mặt phẳng, Ctrl: đảo snap, Shift: bước mịn)"
                        "    Ctrl+click: đưa khớp đang chọn tới đó"
                        "    Chuột phải: lùi    Enter: xong    Esc: tạm dừng")
 
@@ -1417,7 +1517,16 @@ def _prompt():
     chosen = _S.get("selected")
     if not chosen:
         return "Click vào một khớp để chọn"
-    return "%s: kéo để dời, Ctrl+click để đưa tới chỗ khác" % _label(chosen)
+    axis = _S.get("axis")
+    if axis is not None:
+        index, plane = axis[1]
+        return "%s: %s" % (_label(chosen), ("khoá mặt phẳng %s" % "YZ XZ XY".split()[index])
+                           if plane else "khoá trục %s" % "XYZ"[index])
+    many = len(selection())
+    if many > 1:
+        return "%d khớp (active: %s): kéo / G dời cả nhóm, Căn thẳng ở panel" % (
+            many, _label(chosen))
+    return "%s: kéo hoặc G để dời, Ctrl+click để đưa tới chỗ khác" % _label(chosen)
 
 
 @persistent
@@ -1477,7 +1586,11 @@ class SRP_OT_marker_cmd(bpy.types.Operator):
                 "PICK_CHAIN": "Chọn chuỗi sẽ chịu tác động của các nút xoay, căn và trục gập",
                 "PAIR_CHAIN": "Tạo thêm bên đối xứng cho chuỗi đã vẽ, giữ nguyên dáng và xương cha",
                 "CENTER": "Đưa mọi đốt của chuỗi vào giữa khối thịt, giữ nguyên độ dài dọc xương",
-                "HINGE": "Đặt trục X của cả chuỗi trùng trục gập, suy từ độ cong của các đốt"
+                "HINGE": "Đặt trục X của cả chuỗi trùng trục gập, suy từ độ cong của các đốt",
+                "SNAP": SNAP_TIPS.get(props.index, ""),
+                "ALIGN": "Đưa mọi khớp đang chọn về cùng toạ độ %s với khớp active"
+                         % "XYZ"[props.index % 3],
+                "UNPICK": "Chỉ giữ khớp active, bỏ chọn các khớp còn lại",
                 }.get(props.cmd, "")
 
     @classmethod
@@ -1496,6 +1609,48 @@ NAV_KEYS = {'MIDDLEMOUSE', 'WHEELUPMOUSE', 'WHEELDOWNMOUSE', 'TRACKPADPAN',
 PIE_KEYMAPS = ("3D View", "Object Mode")
 _MODS = ("ctrl", "shift", "alt", "oskey")
 OWN_KEYS = {'RET', 'NUMPAD_ENTER', 'ESC', 'LEFTMOUSE', 'RIGHTMOUSE'}
+
+# ------------------------------------------------ khoa truc khi doi marker (nhu G)
+
+AXIS_KEYS = {'X': 0, 'Y': 1, 'Z': 2}
+AXIS_COLORS = ((1.0, 0.2, 0.32, 1.0), (0.55, 0.86, 0.0, 1.0), (0.16, 0.56, 1.0, 1.0))
+_AXES = (Vector((1.0, 0.0, 0.0)), Vector((0.0, 1.0, 0.0)), Vector((0.0, 0.0, 1.0)))
+
+
+def axis_key(state, kind, shift):
+    """Khoa moi sau khi bam X / Y / Z (Shift: mat phang chua truc do ra).
+
+    state = None hoac (chi so truc, la mat phang). Bam lai dung phim dang khoa thi bo
+    khoa -- Blender con mot nac "truc cuc bo" o giua, marker khong co huong rieng.
+    """
+    want = (AXIS_KEYS[kind], bool(shift))
+    return None if state == want else want
+
+
+def axis_point(origin, ray_o, ray_d, state):
+    """Diem tren truc / mat phang dang khoa, gan tia chuot nhat. None: tia song song."""
+    a = _AXES[state[0]]
+    origin, ray_o, ray_d = Vector(origin), Vector(ray_o), Vector(ray_d).normalized()
+    if state[1]:                                   # mat phang phap tuyen a, qua origin
+        den = ray_d.dot(a)
+        if abs(den) < 1e-6:
+            return None
+        return ray_o + ray_d * ((origin - ray_o).dot(a) / den)
+    # duong origin + t*a: diem gan tia nhat
+    w = origin - ray_o
+    b = a.dot(ray_d)
+    den = 1.0 - b * b
+    if den < 1e-9:
+        return None
+    t = (b * w.dot(ray_d) - w.dot(a)) / den
+    return origin + a * t
+
+
+def axis_project(point, origin, state):
+    """Chieu mot diem (diem snap) len truc / mat phang dang khoa."""
+    a = _AXES[state[0]]
+    d = Vector(point) - Vector(origin)
+    return Vector(origin) + (d - a * d.dot(a) if state[1] else a * d.dot(a))
 
 
 def pie_keys(keyconfig):
@@ -1516,6 +1671,76 @@ def pie_keys(keyconfig):
                 mods = tuple(-1 if getattr(k, "any", False) else int(getattr(k, m)) for m in _MODS)
                 out.append((k.type, mods))
     return out
+
+
+# ------------------------------------------------ pie Snap (Shift+S) cho marker
+
+SNAP_PIE = "VIEW3D_MT_snap_pie"
+SNAP_TO_CURSOR, SNAP_TO_GRID, SNAP_CURSOR_HERE, SNAP_TO_CURSOR_OFFSET = 0, 1, 2, 3
+SNAP_TIPS = {SNAP_TO_CURSOR: "Đưa khớp đang chọn tới 3D cursor",
+             SNAP_TO_GRID: "Đưa khớp đang chọn về điểm lưới gần nhất",
+             SNAP_CURSOR_HERE: "Đưa 3D cursor tới khớp đang chọn (nhiều khớp: điểm giữa)",
+             SNAP_TO_CURSOR_OFFSET: "Đưa điểm giữa các khớp đang chọn tới 3D cursor, "
+                                    "giữ khoảng cách giữa chúng"}
+
+
+def snap_pie_keys(keyconfig):
+    """Phim dang mo pie Snap cua Blender (Shift+S mac dinh, theo keymap nguoi dung)."""
+    out = []
+    if keyconfig is None:
+        return out
+    for name in PIE_KEYMAPS:
+        km = keyconfig.keymaps.get(name)
+        if km is None:
+            continue
+        for k in km.keymap_items:
+            if k.active and k.idname == 'wm.call_menu_pie' \
+                    and getattr(k.properties, "name", "") == SNAP_PIE:
+                mods = tuple(-1 if getattr(k, "any", False) else int(getattr(k, m)) for m in _MODS)
+                out.append((k.type, mods))
+    return out
+
+
+def grid_round(point, step):
+    """Diem luoi gan nhat (Selection to Grid)."""
+    step = max(float(step), 1e-6)
+    return Vector(tuple(round(c / step) * step for c in point))
+
+
+class SRP_MT_marker_snap_pie(bpy.types.Menu):
+    """Pie Snap trong che do dat marker: dung cho nhu pie Snap cua Blender, nhung cac
+    muc 'Selection' tac dong len KHOP dang chon (marker khong bao gio la object duoc
+    chon, nen pie goc khong lam gi duoc voi no)."""
+    bl_label = "Snap khớp"
+
+    def draw(self, _context):
+        pie = self.layout.menu_pie()
+        cmd = "srp.marker_cmd"
+        pie.operator("view3d.snap_cursor_to_grid", text="Cursor to Grid", icon='CURSOR')
+        op = pie.operator(cmd, text="Selection to Grid", icon='RESTRICT_SELECT_OFF')
+        op.cmd, op.index = 'SNAP', SNAP_TO_GRID
+        op = pie.operator(cmd, text="Cursor to Selected", icon='CURSOR')
+        op.cmd, op.index = 'SNAP', SNAP_CURSOR_HERE
+        op = pie.operator(cmd, text="Selection to Cursor", icon='RESTRICT_SELECT_OFF')
+        op.cmd, op.index = 'SNAP', SNAP_TO_CURSOR
+        op = pie.operator(cmd, text="Selection to Cursor (Keep Offset)", icon='RESTRICT_SELECT_OFF')
+        op.cmd, op.index = 'SNAP', SNAP_TO_CURSOR_OFFSET
+        pie.separator()         # Selection to Active: khop khong co "active"
+        pie.operator("view3d.snap_cursor_to_center", text="Cursor to World Origin", icon='CURSOR')
+        pie.operator("view3d.snap_cursor_to_active", text="Cursor to Active", icon='CURSOR')
+
+
+def _snap_menu_items(self, _context):
+    """Dau menu Object > Snap cua Blender, chi khi dang dat marker: cac muc cho KHOP."""
+    if not is_active():
+        return
+    layout = self.layout
+    for text, how in (("Khớp đang chọn → Cursor", SNAP_TO_CURSOR),
+                      ("Khớp đang chọn → Lưới", SNAP_TO_GRID),
+                      ("Cursor → Khớp đang chọn", SNAP_CURSOR_HERE)):
+        op = layout.operator("srp.marker_cmd", text=text, icon='EMPTY_SINGLE_ARROW')
+        op.cmd, op.index = 'SNAP', how
+    layout.separator()
 
 
 def _is_pie(event, pies):
@@ -1579,12 +1804,13 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         self.tree = mesh_tree(context, mesh) if mesh is not None else None
         self.snapper = snapping.Snapper()
         self.pies = pie_keys(context.window_manager.keyconfigs.user)
+        self.snap_pies = snap_pie_keys(context.window_manager.keyconfigs.user)
         ref.hide_set(True)        # xuong ref nam chong len marker, che mat khop
         self._deselect(context)
         guide = guide_of(ref, self.mirror)
         _S.clear()
         _S.update(active=True, area=context.area.as_pointer(), ref=ref.name, guide=guide,
-                  selected=None, hover=None, req=None, open_stage=None, snap=None)
+                  selected=None, hover=None, req=None, open_stage=None, snap=None, axis=None)
         self.timer = context.window_manager.event_timer_add(0.15, window=context.window)
         context.window_manager.modal_handler_add(self)
         context.window.cursor_modal_set('CROSSHAIR')
@@ -1689,10 +1915,11 @@ class SRP_OT_marker_mode(bpy.types.Operator):
     def _snapshot(self):
         ref = bpy.data.objects[self.ref_name]
         return (_S.get("selected"), {m.name: (m.location.copy(), bool(m.get(TAG_PLACED)))
-                                     for m in markers_of(ref)})
+                                     for m in markers_of(ref)}, list(_S.get("picked", ())))
 
     def _restore(self, saved):
-        _S["selected"], rows = saved
+        _S["selected"], rows = saved[0], saved[1]
+        _S["picked"] = list(saved[2]) if len(saved) > 2 else []
         for name, (loc, placed) in rows.items():
             marker = bpy.data.objects.get(name)
             if marker is not None:
@@ -1711,7 +1938,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
             _S["open_stage"] = None if _S.get("open_stage") == stage else stage
         elif cmd == 'SELECT':
             if 0 <= index < len(_S["guide"]):
-                _S["selected"] = _S["guide"][index]["marker"]
+                select_only(_S["guide"][index]["marker"])
         elif cmd == 'DRAW':
             settings = context.scene.srp_marker
             label, bone_name, count, kinds, root_only = CHAIN_PRESETS[index]
@@ -1736,7 +1963,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
                 else:
                     self.history = []       # marker cu da doi ten, lui lai la vo nghia
                     _S["guide"] = guide_of(ref, self.mirror)
-                    _S["selected"] = end_map(ref)[(made[0], 'T')].name
+                    select_only(end_map(ref)[(made[0], 'T')].name)
                     self.report({'INFO'}, "Đã tạo hai bên: %s" % made[0])
         elif cmd == 'DRAW_OK':
             self._draw_commit(context)
@@ -1751,7 +1978,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
                 gone = delete_chain(context, ref, chosen, mesh)
                 # Lich su giu vi tri cua khop da xoa, lui lai la vo nghia
                 self.history = []
-                _S["selected"] = None
+                select_only(None)
                 _S["guide"] = guide_of(ref, self.mirror)
                 self.report({'INFO'}, "Đã xoá %d xương" % gone)
             elif chosen is not None:
@@ -1759,6 +1986,12 @@ class SRP_OT_marker_mode(bpy.types.Operator):
                                        context.scene.srp_marker.chain_socket.strip(), mesh)
                 self.report({'ERROR'} if why else {'INFO'}, why or "Đã đổi xương cha")
             self._deselect(context)
+        elif cmd == 'SNAP':
+            self._snap(context, index)
+        elif cmd == 'ALIGN':
+            self._align(context, index)
+        elif cmd == 'UNPICK':
+            select_only(_S.get("selected"))
         elif cmd in {'CENTER', 'HINGE'}:
             chosen = bpy.data.objects.get(_S.get("selected") or "")
             ref = bpy.data.objects[self.ref_name]
@@ -1836,7 +2069,7 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         _S["draw"] = None
         _S["guide"] = guide_of(ref, self.mirror)
         _S["open_stage"] = "Phụ kiện"
-        _S["selected"] = end_map(ref)[(made[0], 'T')].name
+        select_only(end_map(ref)[(made[0], 'T')].name)
         parent = ref.data.bones[made[0]].parent
         self.report({'INFO'}, "Đã thêm %s, %d đốt, nối vào %s"
                     % (made[0], len(made), parent.name if parent else "gốc"))
@@ -1935,6 +2168,11 @@ class SRP_OT_marker_mode(bpy.types.Operator):
         if self.drag is not None:
             return self._on_drag(context, event, regions)
 
+        if value == 'PRESS' and _is_pie(event, getattr(self, "snap_pies", ())) \
+                and _S.get("draw") is None:
+            bpy.ops.wm.call_menu_pie(name=SRP_MT_marker_snap_pie.__name__)
+            return {'RUNNING_MODAL'}
+
         if passes_to_blender(event, context.preferences.inputs, self.pies):
             return {'PASS_THROUGH'}
 
@@ -1980,6 +2218,10 @@ class SRP_OT_marker_mode(bpy.types.Operator):
                     return {'PASS_THROUGH'}
                 self._press(context, event, view)
                 return {'RUNNING_MODAL'}
+            if kind == 'G' and over_view and not (event.ctrl or event.alt or event.shift
+                                                  or event.oskey):
+                self._grab(context, event, view)
+                return {'RUNNING_MODAL'}
         return {'RUNNING_MODAL'}    # moi thu khac bi nuot: khong chon, khong doi gi
 
     def _press(self, context, event, view):
@@ -1990,58 +2232,173 @@ class SRP_OT_marker_mode(bpy.types.Operator):
             if chosen is not None:
                 ref = bpy.data.objects[self.ref_name]
                 self.history.append(self._snapshot())
-                place(ref, chosen, self._click_point(context, view, xy, event, chosen.location,
-                                                     base=chosen.location.copy())[0],
-                      self.mirror)
+                point = self._click_point(context, view, xy, event, chosen.location,
+                                          base=chosen.location.copy())[0]
+                names = selection()
+                if len(names) > 1:      # ca nhom theo, giu khoang cach
+                    delta = point - chosen.location
+                    move_group(ref, {n: bpy.data.objects[n].location + delta for n in names},
+                               self.mirror)
+                else:
+                    place(ref, chosen, point, self.mirror)
                 self._redraw()
             return
         hit = self._pick(context, view, xy)
+        if hit is not None and event.shift:
+            toggle_pick(hit)
+            self._redraw()
+            return
         if hit is not None:
-            _S["selected"] = hit
-            self.drag = {"name": hit, "start": xy, "saved": self._snapshot(), "moved": False,
-                         "origin": bpy.data.objects[hit].location.copy()}
+            # Bam vao mot khop trong nhom: giu nhom, khop do thanh active, keo ca nhom.
+            # Bam roi tha khong keo thi moi chon rieng no (xem _end_drag), nhu Blender.
+            keep = hit in selection() and len(selection()) > 1
+            if not keep:
+                select_only(hit)
+            elif hit != _S.get("selected"):
+                toggle_pick(hit)            # da chon, chua active -> thanh active
+            self._start_drag(context, hit, xy, grab=False, off=(0.0, 0.0))
+            self.drag["group_click"] = keep
             self._redraw()
         # Click ra ngoai: khong lam gi. Bam truot marker khong duoc lam khop nhay di
         # hay mat khop dang chon.
 
-    def _on_drag(self, context, event, regions):
-        drag, kind = self.drag, event.type
-        ref = bpy.data.objects[self.ref_name]
-        if kind in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
-            self._restore(drag["saved"])
-            self.drag = None
-            self._show_snap()
+    def _snap(self, context, how):
+        """Muc cua pie Snap: khop -> cursor / luoi, hoac cursor -> khop."""
+        chosen = bpy.data.objects.get(_S.get("selected") or "")
+        if chosen is None:
+            self.report({'INFO'}, "Chọn một khớp trước")
+            return
+        cursor = context.scene.cursor
+        names = selection() or [chosen.name]
+        locs = {n: bpy.data.objects[n].location.copy() for n in names}
+        if how == SNAP_CURSOR_HERE:     # nhieu khop: diem giua (median) nhu Blender
+            cursor.location = sum(locs.values(), Vector()) / len(locs)
             self._redraw()
-            return {'RUNNING_MODAL'}
-        if kind == 'LEFTMOUSE' and event.value == 'RELEASE':
-            self.drag = None
-            self._show_snap()
+            return
+        if how == SNAP_TO_GRID:
+            step = self.area.spaces.active.overlay.grid_scale_unit
+            moves = {n: grid_round(p, step) for n, p in locs.items()}
+        else:
+            # Selection to Cursor: khop ACTIVE toi cursor. Keep Offset: diem giua toi
+            # cursor. Ca nhom giu nguyen khoang cach -- don moi khop vao mot diem chi
+            # ra xuong dai 0.
+            pivot = chosen.location if how == SNAP_TO_CURSOR \
+                else sum(locs.values(), Vector()) / len(locs)
+            delta = cursor.location - pivot
+            moves = {n: p + delta for n, p in locs.items()}
+        self.history.append(self._snapshot())
+        move_group(bpy.data.objects[self.ref_name], moves, self.mirror)
+        self._redraw()
+
+    def _align(self, context, axis):
+        names = selection()
+        if len(names) < 2:
+            self.report({'INFO'}, "Shift+click chọn thêm khớp để căn thẳng")
+            return
+        self.history.append(self._snapshot())
+        move_group(bpy.data.objects[self.ref_name],
+                   align_moves(names, _S["selected"], axis, self.mirror), self.mirror)
+        self._redraw()
+
+    def _grab(self, context, event, view):
+        """G: doi khop dang chon theo chuot, khong can giu nut -- nhu G cua Blender."""
+        chosen = bpy.data.objects.get(_S.get("selected") or "")
+        if chosen is None:
+            self.report({'INFO'}, "Chọn một khớp trước rồi bấm G")
+            return
+        xy = self._xy(view, event)
+        rv3d = self.area.spaces.active.region_3d
+        c = view3d_utils.location_3d_to_region_2d(view, rv3d, chosen.location)
+        # giu khoang lech chuot - marker: bam G o dau marker cung khong nhay toi chuot
+        off = (c.x - xy[0], c.y - xy[1]) if c is not None else (0.0, 0.0)
+        self._start_drag(context, chosen.name, xy, grab=True, off=off)
+        context.window.cursor_modal_set('SCROLL_XY')
+        self._redraw()
+
+    def _start_drag(self, context, name, xy, grab, off):
+        names = selection() or [name]
+        self.drag = {"name": name, "start": xy, "xy": xy, "saved": self._snapshot(),
+                     "moved": grab, "origin": bpy.data.objects[name].location.copy(),
+                     "grab": grab, "off": off, "axis": None, "group_click": False,
+                     "origins": {n: bpy.data.objects[n].location.copy() for n in names}}
+
+    def _end_drag(self, context, keep):
+        drag = self.drag
+        self.drag = None
+        if keep:
             if drag["moved"]:
                 self.history.append(drag["saved"])
-            self._redraw()
+            elif drag.get("group_click"):
+                select_only(drag["name"])       # click tha ngay: chi chon khop nay
+        else:
+            self._restore(drag["saved"])
+        _S["axis"] = None
+        self._show_snap()
+        if drag["grab"]:
+            context.window.cursor_modal_set('HAND' if _S.get("hover") else 'CROSSHAIR')
+        self._redraw()
+        return {'RUNNING_MODAL'}
+
+    def _on_drag(self, context, event, regions):
+        drag, kind, value = self.drag, event.type, event.value
+        if kind in {'ESC', 'RIGHTMOUSE'} and value == 'PRESS':
+            return self._end_drag(context, False)
+        if drag["grab"]:
+            # G: click hoac Enter / Space de chot
+            if kind in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER', 'SPACE'} and value == 'PRESS':
+                return self._end_drag(context, True)
+        elif kind == 'LEFTMOUSE' and value == 'RELEASE':
+            return self._end_drag(context, True)
+        view = regions['WINDOW']
+        if kind in AXIS_KEYS and value == 'PRESS' and not (event.ctrl or event.alt
+                                                            or event.oskey):
+            drag["axis"] = axis_key(drag["axis"], kind, event.shift)
+            drag["moved"] = True
+            self._drag_to(context, view, drag["xy"], event)
             return {'RUNNING_MODAL'}
         # Ctrl / Shift doi trang thai giua chung luc keo: tinh lai ngay, khong doi chuot dich
         if kind == 'MOUSEMOVE' or (drag["moved"] and kind in {
                 'LEFT_CTRL', 'RIGHT_CTRL', 'LEFT_SHIFT', 'RIGHT_SHIFT'}):
-            view = regions['WINDOW']
-            xy = self._xy(view, event)
+            if kind == 'MOUSEMOVE':
+                drag["xy"] = self._xy(view, event)
+            xy = drag["xy"]
             if not drag["moved"] and math.hypot(xy[0] - drag["start"][0],
                                                 xy[1] - drag["start"][1]) < DRAG_PX:
                 return {'RUNNING_MODAL'}
             drag["moved"] = True
-            marker = bpy.data.objects[drag["name"]]
-            space = self.area.spaces.active
-            point = view3d_utils.region_2d_to_location_3d(view, space.region_3d, xy,
-                                                          marker.location)
-            # Snapping cua Blender; giu Ctrl dao bat / tat nhu khi G, Shift buoc min
-            snapped, snap = self.snapper.snap(context, space, view, xy, base=drag["origin"],
-                                              free=point, invert=event.ctrl,
-                                              precise=event.shift)
-            self._show_snap(snapped, snap)
-            place(ref, marker, point if snapped is None else snapped, self.mirror,
-                  auto_side=False)
-            self._redraw()
+            self._drag_to(context, view, xy, event)
         return {'RUNNING_MODAL'}
+
+    def _drag_to(self, context, view, xy, event):
+        drag = self.drag
+        ref = bpy.data.objects[self.ref_name]
+        marker = bpy.data.objects[drag["name"]]
+        space = self.area.spaces.active
+        rv3d = space.region_3d
+        at = (xy[0] + drag["off"][0], xy[1] + drag["off"][1])
+        origin, state = drag["origin"], drag["axis"]
+        point = view3d_utils.region_2d_to_location_3d(view, rv3d, at, marker.location)
+        if state is not None:
+            on = axis_point(origin, view3d_utils.region_2d_to_origin_3d(view, rv3d, at),
+                            view3d_utils.region_2d_to_vector_3d(view, rv3d, at), state)
+            point = on if on is not None else axis_project(point, origin, state)
+        # Snapping cua Blender; giu Ctrl dao bat / tat nhu khi G, Shift buoc min. Khoa
+        # truc thi diem snap chieu len truc / mat phang, nhu Blender.
+        snapped, snap = self.snapper.snap(context, space, view, xy, base=origin,
+                                          free=point, invert=event.ctrl,
+                                          precise=event.shift)
+        if snapped is not None and state is not None:
+            snapped = axis_project(snapped, origin, state)
+        self._show_snap(snapped, snap)
+        final = point if snapped is None else snapped
+        origins = drag.get("origins") or {}
+        if len(origins) > 1:            # ca nhom dich cung mot doan voi khop active
+            delta = final - origin
+            move_group(ref, {n: o + delta for n, o in origins.items()}, self.mirror)
+        else:
+            place(ref, marker, final, self.mirror, auto_side=False)
+        _S["axis"] = None if state is None else (origin.copy(), state)
+        self._redraw()
 
 
 class SRP_OT_marker_apply(bpy.types.Operator):
@@ -2207,6 +2564,16 @@ def draw_mode(layout, context):
     box.scale_y = 1.2
     box.label(text=_label(_S.get("selected")) or "Chưa chọn khớp",
               icon='RESTRICT_SELECT_OFF')
+    many = len(selection())
+    if many > 1:
+        row = box.row(align=True)
+        row.label(text="+ %d khớp khác" % (many - 1))
+        row.operator("srp.marker_cmd", text="", icon='X').cmd = 'UNPICK'
+        row = box.row(align=True)
+        row.label(text="Căn thẳng:")
+        for i, axis in enumerate("XYZ"):
+            op = row.operator("srp.marker_cmd", text=axis)
+            op.cmd, op.index = 'ALIGN', i
 
     col = layout.column(align=True)
     for stage_index, stage in enumerate(STAGES):
@@ -2318,6 +2685,7 @@ def register_extra():
     _draw_text = bpy.types.SpaceView3D.draw_handler_add(_on_text, (), 'WINDOW', 'POST_PIXEL')
     if _on_load not in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.append(_on_load)
+    bpy.types.VIEW3D_MT_snap.prepend(_snap_menu_items)
 
 
 def unregister_extra():
@@ -2326,6 +2694,10 @@ def unregister_extra():
     _S["active"] = False
     if _on_load in bpy.app.handlers.load_pre:
         bpy.app.handlers.load_pre.remove(_on_load)
+    try:
+        bpy.types.VIEW3D_MT_snap.remove(_snap_menu_items)
+    except (AttributeError, ValueError):
+        pass
     for handle in (_draw_view, _draw_text):
         if handle is not None:
             bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW')
@@ -2337,5 +2709,5 @@ def unregister_extra():
 
 
 CLASSES = (SRP_MarkerSettings, SRP_OT_marker_start,
-           SRP_OT_marker_cmd, SRP_OT_marker_mode, SRP_OT_marker_apply,
+           SRP_OT_marker_cmd, SRP_MT_marker_snap_pie, SRP_OT_marker_mode, SRP_OT_marker_apply,
            SRP_OT_marker_roll, SRP_OT_marker_clear)

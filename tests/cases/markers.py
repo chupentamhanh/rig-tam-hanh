@@ -237,6 +237,94 @@ why = MK.set_chain_parent(ctx, ref, MK.end_map(ref)[("Ear.L", 'H')], "Neck", bod
 rep("đổi xương cha cả hai bên", not why and ref.data.bones["Ear.L"].parent.name == "Neck" and ref.data.bones["Ear.R"].parent.name == "Neck", str(why))
 rep("vị trí khớp giữ nguyên sau khi đổi cha", (MK.end_map(ref)[("Ear.L.001", 'T')].location - MK.mirror_point(ref, ear[1])).length < 1e-6)
 M = {n: m for m in MK.markers_of(ref) for n, e in MK.ends_of(m) if e == 'H'}
+
+# dời cổ tay khoá trục X (G rồi X): chỉ X đổi, rồi trả về chỗ cũ
+hand = M["Hand_Master.L"]
+o = hand.location.copy()
+MK.place(ref, hand, MK.axis_point(o, o + Vector((0.07, -3.0, 0.25)), Vector((0.0, 1.0, 0.0)),
+                                  (0, False)), True, auto_side=False)
+d = hand.location - o
+rep("dời cổ tay khoá trục X: chỉ X đổi",
+    abs(d.x - 0.07) < 1e-6 and abs(d.y) < 1e-6 and abs(d.z) < 1e-6, str(d))
+MK.place(ref, hand, o, True, auto_side=False)
+
+# pie Snap: Selection to Cursor / Cursor to Selected trên khớp đang chọn, chuột phải lùi được
+from types import SimpleNamespace as _NS0
+_Op = MK.SRP_OT_marker_mode
+fake = _NS0(ref_name=ref.name, mirror=True, history=[], area=None,
+            report=lambda *a: None)
+fake._snapshot = lambda: _Op._snapshot(fake)
+fake._redraw = lambda: None
+MK._S["selected"] = hand.name
+twin = bpy.data.objects[hand[MK.TAG_TWIN]]
+sc.cursor.location = o + Vector((0.05, -0.02, 0.04))
+_Op._snap(fake, ctx, MK.SNAP_TO_CURSOR)
+rep("Selection to Cursor: khớp tới đúng cursor, bên kia đối xứng theo",
+    (hand.location - sc.cursor.location).length < 1e-6 and len(fake.history) == 1
+    and abs(twin.location.z - hand.location.z) < 1e-6, str(hand.location))
+_Op._restore(fake, fake.history.pop())
+rep("chuột phải lùi về chỗ cũ", (hand.location - o).length < 1e-6)
+sc.cursor.location = (0.0, 0.0, 0.0)
+_Op._snap(fake, ctx, MK.SNAP_CURSOR_HERE)
+rep("Cursor to Selected: cursor tới khớp, khớp đứng yên",
+    (sc.cursor.location - o).length < 1e-6 and (hand.location - o).length < 1e-6 and not fake.history)
+
+# ---- chọn nhiều khớp
+knuck = [M[n] for n in ("Index.L", "Middle.L", "Ring.L")]
+a, b, c = (m.name for m in knuck)
+MK.select_only(a)
+MK.toggle_pick(b)
+MK.toggle_pick(c)
+rep("Shift+click thêm: khớp sau cùng là active", MK.selection() == [a, b, c] and MK._S["selected"] == c)
+MK.toggle_pick(b)
+rep("Shift+click khớp đã chọn: thành active", MK.selection() == [a, c, b])
+MK.toggle_pick(b)
+rep("Shift+click khớp active: bỏ chọn nó", MK.selection() == [a, c] and MK._S["selected"] == c)
+MK.toggle_pick(b)
+tw = bpy.data.objects[knuck[0][MK.TAG_TWIN]]
+rep("đối xứng: chọn cả cặp L/R thì chỉ đặt bên L",
+    [o.name for o in MK.group_of([a, tw.name], True)] == [a]
+    and len(MK.group_of([a, tw.name], False)) == 2)
+start = _Op._snapshot(fake)
+before = {m.name: m.location.copy() for m in knuck}
+delta = Vector((0.0, -0.01, 0.03))
+MK.move_group(ref, {n: p + delta for n, p in before.items()}, True)
+rep("dời cả nhóm: mỗi khớp dịch đúng một đoạn",
+    all((bpy.data.objects[n].location - (p + delta)).length < 1e-6 for n, p in before.items()))
+rep("dời cả nhóm: bên kia đối xứng theo", abs(tw.location.z - knuck[0].location.z) < 1e-6)
+moves = MK.align_moves(MK.selection(), MK._S["selected"], 2, True)
+MK.move_group(ref, moves, True)
+zs = [m.location.z for m in knuck]
+rep("Căn thẳng Z: cùng độ cao với khớp active, X / Y giữ nguyên",
+    max(zs) - min(zs) < 1e-6 and abs(zs[0] - bpy.data.objects[MK._S["selected"]].location.z) < 1e-6
+    and all(abs(bpy.data.objects[n].location.x - (p + delta).x) < 1e-6 for n, p in before.items()))
+locs = {m.name: m.location.copy() for m in knuck}
+mid = sum(locs.values(), Vector()) / 3
+sc.cursor.location = mid + Vector((0.02, 0.0, 0.05))
+_Op._snap(fake, ctx, MK.SNAP_TO_CURSOR_OFFSET)
+d = sc.cursor.location - mid
+rep("Keep Offset: điểm giữa nhóm tới cursor, giữ khoảng cách",
+    all((bpy.data.objects[n].location - (p + d)).length < 1e-6 for n, p in locs.items()))
+act = bpy.data.objects[MK._S["selected"]]
+sc.cursor.location = act.location + Vector((0.0, 0.0, -0.04))
+locs = {m.name: m.location.copy() for m in knuck}
+_Op._snap(fake, ctx, MK.SNAP_TO_CURSOR)
+rep("Selection to Cursor: khớp active tới cursor, cả nhóm giữ dáng",
+    (act.location - sc.cursor.location).length < 1e-6
+    and all((bpy.data.objects[n].location - (p + Vector((0, 0, -0.04)))).length < 1e-6
+            for n, p in locs.items()))
+_Op._snap(fake, ctx, MK.SNAP_CURSOR_HERE)
+rep("Cursor to Selected: cursor về điểm giữa nhóm",
+    (sc.cursor.location - sum((m.location for m in knuck), Vector()) / 3).length < 1e-6)
+fake.history.clear()
+_Op._align(fake, ctx, 0)
+rep("nút Căn thẳng X ghi một bước lùi", len(fake.history) == 1
+    and max(m.location.x for m in knuck) - min(m.location.x for m in knuck) < 1e-6)
+_Op._restore(fake, start)
+rep("lùi về trước khi dời nhóm: vị trí và nhóm chọn đều về",
+    all((bpy.data.objects[n].location - p).length < 1e-6 for n, p in before.items())
+    and MK.selection() == [a, c, b])
+MK.select_only(None)
 ref.data.bones["Index.L"][MK.TAG_ROLL] = 30.0
 
 auto = {}
@@ -350,4 +438,41 @@ rep("menu thường (Shift+A, M), pie tắt, keymap mode khác vẫn bị chặn
 rep("phím riêng của chế độ marker không nhường cho pie (Enter, Shift+chuột phải)",
     not _pass('RET') and not _pass('RIGHTMOUSE', shift=True))
 rep("keymap không có (chạy nền) thì không lỗi", MK.pie_keys(None) == [])
+rep("G không lọt ra Blender (G là dời marker)", not _pass('G'))
+
+# ---- pie Snap (Shift+S) cho marker
+def _snapkmi(t, name, **kw):
+    k = _kmi(t, **kw)
+    k.properties = _NS(name=name)
+    return k
+_kc2 = _NS(keymaps={"3D View": _NS(keymap_items=[
+    _snapkmi('S', "VIEW3D_MT_snap_pie", shift=1), _snapkmi('ACCENT_GRAVE', "VIEW3D_MT_view_pie"),
+    _snapkmi('D', "VIEW3D_MT_snap_pie", alt=1, active=False)])})
+sp = MK.snap_pie_keys(_kc2)
+rep("phím pie Snap đọc từ keymap (Shift+S, bỏ pie khác và phím tắt)",
+    sp == [('S', (0, 1, 0, 0))] and MK._is_pie(_ev('S', shift=True), sp)
+    and not MK._is_pie(_ev('S'), sp), str(sp))
+rep("pie Snap của marker đã đăng ký, menu Object > Snap có thêm mục khớp",
+    hasattr(bpy.types, "SRP_MT_marker_snap_pie")
+    and MK._snap_menu_items in getattr(bpy.types.VIEW3D_MT_snap.draw, "_draw_funcs", [MK._snap_menu_items]))
+g = MK.grid_round(Vector((0.234, -0.051, 1.349)), 0.1)
+rep("Selection to Grid: về điểm lưới gần nhất", (g - Vector((0.2, -0.1, 1.3))).length < 1e-6, str(g))
+
+# ---- khoá trục khi dời marker (G / kéo + X Y Z)
+st = MK.axis_key(None, 'X', False)
+rep("X: khoá trục X, bấm lại bỏ khoá", st == (0, False) and MK.axis_key(st, 'X', False) is None)
+rep("đang X bấm Y: đổi sang Y; Shift+Z: mặt phẳng XY",
+    MK.axis_key(st, 'Y', False) == (1, False) and MK.axis_key(st, 'Z', True) == (2, True))
+O = Vector((0.2, 0.1, 1.3))
+ray_o, ray_d = Vector((0.5, -3.0, 1.6)), Vector((0.0, 1.0, 0.0))     # nhìn từ trước
+p = MK.axis_point(O, ray_o, ray_d, (0, False))
+rep("trục X: điểm nằm trên trục, ngay dưới chuột theo X",
+    p is not None and abs(p.y - O.y) < 1e-6 and abs(p.z - O.z) < 1e-6 and abs(p.x - 0.5) < 1e-6, str(p))
+rep("trục song song tia nhìn: None (giữ chỗ cũ)", MK.axis_point(O, ray_o, ray_d, (1, False)) is None)
+p = MK.axis_point(O, ray_o, ray_d, (1, True))
+rep("mặt phẳng XZ: đúng giao điểm tia", p is not None and (p - Vector((0.5, 0.1, 1.6))).length < 1e-6, str(p))
+q = MK.axis_project(Vector((0.9, -0.4, 2.0)), O, (2, False))
+rep("điểm snap chiếu lên trục Z", (q - Vector((0.2, 0.1, 2.0))).length < 1e-6, str(q))
+q = MK.axis_project(Vector((0.9, -0.4, 2.0)), O, (2, True))
+rep("điểm snap chiếu lên mặt phẳng XY", (q - Vector((0.9, -0.4, 1.3))).length < 1e-6, str(q))
 print("TỔNG %d/%d" % (sum(results), len(results)))
