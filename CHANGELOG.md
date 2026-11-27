@@ -7,6 +7,29 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.42.0 — 2026-11-27
+
+**Chế độ đặt marker: G và khoá trục, pie Snap, chọn nhiều khớp** (`markers.py`).
+- **G** trên vùng nhìn dời khớp đang chọn như grab (không cần giữ chuột): click / Enter /
+  Space xác nhận, Esc / chuột phải huỷ. Trong lúc dời (G hay kéo chuột), **X / Y / Z** khoá
+  theo trục, **Shift+X / Y / Z** khoá trong mặt phẳng, bấm lại phím đó để bỏ khoá; đường trục
+  vẽ màu đỏ / xanh lá / xanh dương. Điểm snap được chiếu lên trục / mặt phẳng đang khoá.
+- **Shift+S** mở pie `SRP_MT_marker_snap_pie` (đọc phím từ keymap của pie Snap Blender):
+  Selection to Cursor / to Grid / to Cursor (Keep Offset); Cursor to Selected / Grid / World
+  Origin / Active.
+  Cùng các mục chọn trong menu Object › Snap, chỉ hiện khi đang ở chế độ marker. Mỗi lần snap
+  là một bước lùi (chuột phải).
+- **Shift+click** chọn thêm / bỏ khớp theo luật Blender (click khớp đã chọn mà chưa active thì
+  thành active, click lại khớp active thì bỏ). Kéo một khớp trong nhóm, G, Ctrl+click hay Snap
+  dời cả nhóm theo cùng độ dời; cha được đặt trước con, khớp bên R mà khớp L đối xứng đang
+  được chọn thì để đối xứng lo. Click một khớp trong nhóm mà không kéo: chỉ chọn khớp đó.
+- Panel: *+ N khớp khác* (nút X bỏ chọn thêm), *Căn thẳng X / Y / Z* đưa cả nhóm về cùng toạ
+  độ trục đó với khớp active, là một bước lùi.
+- Bước lùi lưu cả nhóm đang chọn (bản ghi cũ 2 phần vẫn đọc được).
+- Test `markers` lên 133 mục (khoá trục, giao tia / mặt phẳng, pie và menu Snap, snap nhóm,
+  chọn nhiều, dời nhóm, căn thẳng, lùi); cả bộ 34/34. Chưa thử bằng chuột / bàn phím thật
+  trong bộ test (chạy nền).
+
 ## 1.41.1 — 2026-11-27
 
 **Nhãn cầu rời skin cứng vào xương mắt, như răng** (`face.skin_rigid`, `face.rigid_bone`).
