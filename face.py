@@ -5306,18 +5306,72 @@ def eyeball_islands(face, side, islands=None, home=None):
     return _eye_verts(face, reg, side, islands, home)
 
 
-def _bone_parent(obj, arm, bone_name):
-    """Gắn object vào một xương, giữ nguyên chỗ nó đang đứng.
+def _rest_world(obj):
+    """matrix_world của object lúc rig ở rest. Object gắn kiểu parent BONE thì
+    `matrix_world` mang theo pose hiện tại -- đọc thẳng là nướng luôn tư thế
+    đang xoay vào chỗ đứng của nó."""
+    arm = obj.parent
+    if obj.parent_type == 'BONE' and arm is not None and arm.type == 'ARMATURE':
+        bone = arm.data.bones.get(obj.parent_bone)
+        if bone is not None:
+            return (arm.matrix_world @ bone.matrix_local
+                    @ Matrix.Translation((0.0, bone.length, 0.0))
+                    @ obj.matrix_parent_inverse @ obj.matrix_basis)
+    return obj.matrix_world.copy()
 
-    Parent kiểu BONE lấy ĐUÔI xương làm gốc, nên phải gán lại `matrix_world`
-    sau khi nối -- không thì con ngươi nhảy đi đúng một đoạn bằng chiều dài
-    xương mắt và trông như bị bắn ra sau gáy.
+
+def skin_rigid(obj, arm, bone_name):
+    """Skin CỨNG cả object vào một xương: một nhóm trọn mọi vertex, weight 1.0,
+    cộng armature modifier -- y như răng. Giữ nguyên chỗ nó đang đứng.
+
+    Trước đây nhãn cầu gắn bằng parent BONE: chạy đúng trong Blender nhưng nhìn
+    vào không thấy modifier lẫn vertex group nào, khác hẳn răng / lưỡi / lông
+    mày, và mỗi chỗ trong addon phải biết thêm một kiểu gắn thứ hai.
     """
-    keep = obj.matrix_world.copy()
+    keep = _rest_world(obj)
+    for mod in [m for m in obj.modifiers if m.type == 'ARMATURE']:
+        obj.modifiers.remove(mod)
+    for group in [g for g in obj.vertex_groups if g.name in arm.data.bones]:
+        obj.vertex_groups.remove(group)
+    group = obj.vertex_groups.new(name=bone_name)
+    group.add(range(len(obj.data.vertices)), 1.0, 'REPLACE')
     obj.parent = arm
-    obj.parent_type = 'BONE'
-    obj.parent_bone = bone_name
+    obj.parent_type = 'OBJECT'
+    obj.parent_bone = ""
+    obj.matrix_parent_inverse = Matrix.Identity(4)
     obj.matrix_world = keep
+    mod = obj.modifiers.new(name=arm.name, type='ARMATURE')
+    mod.object = arm
+    mod.use_vertex_groups = True
+
+
+def rigid_bone(obj, arm):
+    """Tên xương mà `obj` đi theo CỨNG trọn khối, hoặc None.
+
+    Nhận cả hai kiểu: skin 100% vào một xương deform (`skin_rigid`, hay bind tay
+    ra cùng kết quả) và parent BONE của file làm trước bản này.
+    """
+    if obj is None or obj.type != 'MESH' or arm is None:
+        return None
+    if obj.parent is arm and obj.parent_type == 'BONE' and obj.parent_bone:
+        return obj.parent_bone
+    if not any(m.type == 'ARMATURE' and m.object is arm for m in obj.modifiers):
+        return None
+    bones = arm.data.bones
+    own = {g.index: g.name for g in obj.vertex_groups
+           if g.name in bones and bones[g.name].use_deform}
+    if not own or not len(obj.data.vertices):
+        return None
+    hit = None
+    for v in obj.data.vertices:
+        live = [g for g in v.groups if g.group in own and g.weight > 1e-4]
+        if len(live) != 1 or live[0].weight < 0.999:
+            return None
+        name = own[live[0].group]
+        if hit is not None and name != hit:
+            return None
+        hit = name
+    return hit
 
 
 class FACESHAPES_OT_split_eyeballs(Operator):
@@ -5396,7 +5450,7 @@ class FACESHAPES_OT_split_eyeballs(Operator):
                 entry.mesh = obj
             bone = "%s.%s" % (self.eye_name, side)
             if arm is not None and bone in arm.data.bones:
-                _bone_parent(obj, arm, bone)
+                skin_rigid(obj, arm, bone)
             else:
                 notes.append("rig không có xương %r nên %s chưa gắn vào đâu"
                              % (bone, obj.name))
@@ -5982,13 +6036,11 @@ def face_region_groups(mesh):
 def attach_eye(obj, arm, bone_name):
     """Gan nhan cau CUNG vao mot xuong mat.
 
-    Nhan cau la khoi cung: cho no di theo XUONG bang parent thay vi bang trong
-    so skin thi khong con trong so nao de to sai. Bo armature modifier di —
-    de ca hai duong cung chay la no chiu bien dang hai lan.
+    Nhan cau la khoi cung: skin tron 1.0 vao DUNG xuong mat, y nhu rang --
+    khong de automatic weights chia no cho mi mat. Moi nhom cu va moi armature
+    modifier cu bi go truoc, ke ca kieu parent BONE cua ban truoc.
     """
-    for mod in [m for m in obj.modifiers if m.type == 'ARMATURE']:
-        obj.modifiers.remove(mod)
-    _bone_parent(obj, arm, bone_name)
+    skin_rigid(obj, arm, bone_name)
     return obj.name
 
 

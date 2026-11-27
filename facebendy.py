@@ -295,10 +295,12 @@ def build(context, arm):
 
 
 def eyeball_for(arm, side):
-    """Mesh nhãn cầu gắn vào xương Eye.<side>, hoặc None."""
+    """Mesh nhãn cầu gắn cứng vào xương Eye.<side> (skin 100% hay parent BONE
+    kiểu cũ), hoặc None."""
+    from .face import rigid_bone
     bone = "Eye.%s" % side
     for o in bpy.data.objects:
-        if o.type == 'MESH' and o.parent is arm and o.parent_type == 'BONE' and o.parent_bone == bone:
+        if o.type == 'MESH' and o.parent is arm and rigid_bone(o, arm) == bone:
             return o
     return None
 

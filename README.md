@@ -72,8 +72,9 @@ Khu **Dựng** là một danh sách 7 bước. Bước đã xong có dấu ✓; 
 **Bước 1 · Chọn mesh**
 
 - Chọn mesh thân nhân vật và đặt tên cho rig.
-- Nếu mắt là object riêng: thêm vào mục *Nhãn cầu rời* (trái / phải). Mắt sẽ được gắn cứng
-  vào xương mắt thay vì skin như da.
+- Nếu mắt là object riêng: thêm vào mục *Nhãn cầu rời* (trái / phải). Mắt được skin cứng
+  100% vào xương mắt (armature modifier + một vertex group weight 1, như răng) thay vì chia
+  weight như da.
 - Răng, lưỡi, lông mày là mesh riêng: thêm vào mục bên dưới với đúng vai trò.
 
 <br clear="right">

@@ -593,10 +593,11 @@ def eye_pairs(context, fit, height):
         pts = [m @ v.co for v in o.data.vertices]
         return sum(pts, Vector()) / max(len(pts), 1)
 
+    from .face import rigid_bone
     for o in bpy.data.objects:
-        if o.type != 'MESH' or o.parent is not fit.rig or o.parent_type != 'BONE':
+        if o.type != 'MESH' or o.parent is not fit.rig:
             continue
-        bone = B.get(o.parent_bone)
+        bone = B.get(rigid_bone(o, fit.rig) or "")
         if bone is None or bone.name not in eye_bones:
             continue
         c = fit.point(fit.bone_for(bone.name), centre(o, Ri @ _world(o)))
@@ -612,9 +613,13 @@ def mesh_pairs(context, fit, body_src, body_dst, height):
     """{mesh mới: mesh mẫu} cho mesh phụ có hình y như mẫu (lông mày...).
     Ghép theo tên bỏ tiền tố ("Kid_eyebrow" ~ "Adult_eyebrow"), rồi kiểm bằng
     hình: lưới mẫu đã uốn phải nằm trên lưới mới."""
+    from . import generate
+    from .face import rigid_bone
+    eyes = set(generate.eye_bone_names(fit.rig))
     out = {}
     for src in template_meshes(fit.rig):
-        if src is body_src:
+        # nhãn cầu mẫu giờ cũng skin (cứng) vào rig -- nó đi đường `eye_pairs`
+        if src is body_src or rigid_bone(src, fit.rig) in eyes:
             continue
         stem = _stem(src.name)
         cands = [o for o in context.scene.objects if o.type == 'MESH' and o is not body_dst

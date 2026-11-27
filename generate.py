@@ -1177,12 +1177,23 @@ def mount_bones(rig):
     `Prop_01` hay gi cung duoc, addon khong phai doan. Va xuong nao cong phu
     kien SKIN (armature modifier) thi khong nam trong day — cai do phai
     deform that.
+
+    Ngoai le: nhan cau skin CUNG 100% vao xuong mat (`face.skin_rigid`) — ve
+    nghia van la phu kien gan cung, xuong mat khong duoc an da mat. Chi xet
+    xuong mat: toc skin cung vao `Head` ma tinh la "cong phu kien" thi `Head`
+    bi giau khoi bind than.
     """
     out = {}
+    eyes = set(eye_bone_names(rig))
     for obj in bpy.data.objects:
         if (obj.parent is rig and obj.parent_type == 'BONE'
                 and obj.parent_bone):
             out.setdefault(obj.parent_bone, []).append(obj.name)
+        elif (obj.type == 'MESH' and obj.parent is rig
+              and any(obj.vertex_groups.get(n) for n in eyes)):
+            bone = face.rigid_bone(obj, rig)
+            if bone in eyes:
+                out.setdefault(bone, []).append(obj.name)
     return out
 
 
@@ -1197,8 +1208,11 @@ def stray_mounts(context, rig):
     if not mounted:
         return []
     found = []
+    # chinh phu kien skin cung (nhan cau) giu trong so xuong mat la DUNG —
+    # tinh no vao day thi nut "Go trong so" xoa mat cho bam cua nhan cau
+    carriers = {n for names in mounted.values() for n in names}
     for obj in context.scene.objects:
-        if obj.type != 'MESH':
+        if obj.type != 'MESH' or obj.name in carriers:
             continue
         if not any(m.type == 'ARMATURE' and m.object is rig
                    for m in obj.modifiers):

@@ -7,6 +7,26 @@ Bài test nằm trong `tests/` của repo (không đi kèm file zip phát hành)
 `tests/README.md`. Các mục cũ nhắc tên bài test thời trước khi có bộ test
 chung -- một số bài đó đã gộp vào `tests/cases/`.
 
+## 1.41.1 — 2026-11-27
+
+**Nhãn cầu rời skin cứng vào xương mắt, như răng** (`face.skin_rigid`, `face.rigid_bone`).
+- Trước đây bước Bind và nút *Tách nhãn cầu* gắn nhãn cầu bằng parent BONE: chạy đúng nhưng
+  object mắt không có armature modifier lẫn vertex group nào, khác hẳn răng / lưỡi / lông
+  mày, nên trông như chưa bind. Giờ: một nhóm `Eye.L/R` trọn mọi vertex weight 1.0, armature
+  modifier, parent rig kiểu OBJECT. Chỗ đứng giữ nguyên, kể cả khi gắn lúc rig đang pose (đọc
+  vị trí nghỉ thay vì `matrix_world` đang mang tư thế).
+- `rigid_bone` nhận cả hai kiểu (file cũ còn parent BONE, hay bind tay ra 100% một xương):
+  mặt bendy (`eyeball_for`), khớp nhân vật mẫu (`eye_pairs`, `mesh_pairs` không ghép nhãn
+  cầu mẫu như mesh phụ), xương cõng phụ kiện (`mount_bones`) đều dùng nó.
+- `mount_bones` chỉ tính nhãn cầu skin cứng vào xương MẮT -- tóc skin cứng vào `Head` mà
+  tính là cõng phụ kiện thì `Head` bị giấu khỏi bind thân.
+- `stray_mounts` bỏ qua chính vật được cõng: không thì nút *Gỡ trọng số khỏi xương cõng phụ
+  kiện* xoá luôn chỗ bám của nhãn cầu.
+- Số đo (Adult, gắn lại trong lúc xoay Eye 25°/-15°, Head 30°, Neck 12°): lệch so với kiểu
+  cũ < 0.1 mm, rest không xê dịch; Hotdog: xoay Eye 25° nhãn cầu dời 26 mm, khoảng cách tới
+  tâm xương đổi < 0.001 mm.
+- Test mới `eye_skin` (18 mục); cả bộ 34/34.
+
 ## 1.41.0 — 2026-11-26
 
 **Chép weight nhân vật mẫu kiểu Mixamo** (`templateweights.py`) -- bước thử trong *Sửa weight*.
